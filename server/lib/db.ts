@@ -1,16 +1,16 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 
 const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'dolus.db');
 
 // singleton for Next.js dev hot-reload
-const g = globalThis as unknown as { _dolusDb?: Database.Database };
-const db = g._dolusDb ?? new Database(dbPath);
+const g = globalThis as unknown as { _dolusDb?: DatabaseSync };
+const db = g._dolusDb ?? new DatabaseSync(dbPath);
 g._dolusDb = db;
 
-db.pragma('journal_mode = WAL');
+db.exec('PRAGMA journal_mode = WAL');
 
-db.exec(`
+export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS packages (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL UNIQUE,
@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS heartbeats (
   beacon_id INTEGER NOT NULL REFERENCES beacons(id),
   ts        INTEGER NOT NULL DEFAULT (unixepoch())
 );
-`);
+`;
+
+db.exec(SCHEMA);
 
 export default db;
 

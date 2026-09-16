@@ -1,6 +1,8 @@
 server/node_modules/
 server/.next/
 server/*.db
+server/*.db-shm
+server/*.db-wal
 cli/dolus
 .env
 .env.*
