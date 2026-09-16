@@ -1,0 +1,7 @@
+server/node_modules/
+server/.next/
+server/*.db
+cli/dolus
+.env
+.env.*
+*.db
