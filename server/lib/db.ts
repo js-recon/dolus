@@ -11,10 +11,21 @@ g._dolusDb = db;
 db.exec('PRAGMA journal_mode = WAL');
 
 export const SCHEMA = `
+CREATE TABLE IF NOT EXISTS accounts (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL UNIQUE,
+  registry_url TEXT NOT NULL,
+  token        TEXT NOT NULL,
+  c2_url       TEXT NOT NULL,
+  notes        TEXT,
+  created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
 CREATE TABLE IF NOT EXISTS packages (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL UNIQUE,
   status     TEXT NOT NULL DEFAULT 'pending',
+  account_id INTEGER REFERENCES accounts(id),
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
@@ -48,6 +59,7 @@ db.exec(SCHEMA);
 // ponytail: idempotent column additions for existing DBs (ALTER TABLE throws if column exists)
 try { db.exec('ALTER TABLE beacons ADD COLUMN kill INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 try { db.exec('ALTER TABLE beacons ADD COLUMN destroyed_at INTEGER'); } catch (_) {}
+try { db.exec('ALTER TABLE packages ADD COLUMN account_id INTEGER REFERENCES accounts(id)'); } catch (_) {}
 
 export default db;
 
@@ -55,6 +67,17 @@ export type Package = {
   id: number;
   name: string;
   status: 'pending' | 'published' | 'failed';
+  account_id: number | null;
+  created_at: number;
+};
+
+export type Account = {
+  id: number;
+  name: string;
+  registry_url: string;
+  token: string;
+  c2_url: string;
+  notes: string | null;
   created_at: number;
 };
 

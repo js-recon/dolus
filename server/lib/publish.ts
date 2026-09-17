@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
+import http from 'http';
+import https from 'https';
 
 // dolus/server/../packages/template
 const TEMPLATE_DIR = path.join(process.cwd(), '..', 'packages', 'template');
@@ -12,11 +14,27 @@ export function renderTemplate(content: string, pkgName: string, c2Url: string):
   return content.replaceAll('__PKG_NAME__', pkgName).replaceAll('__C2_URL__', c2Url);
 }
 
-export function publishPackage(pkgName: string): { success: boolean; output: string } {
-  const c2Url = process.env.C2_URL || 'http://localhost:3000';
-  const registryUrl = process.env.REGISTRY_URL;
-  if (!registryUrl) return { success: false, output: 'REGISTRY_URL env var not set' };
+export function packageExistsOnRegistry(pkgName: string, registryUrl: string): Promise<boolean> {
+  const base = registryUrl.endsWith('/') ? registryUrl : registryUrl + '/';
+  const url = new URL(pkgName, base);
+  const mod = url.protocol === 'https:' ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = mod.request(url, { method: 'HEAD' }, res => {
+      if (res.statusCode === 200) resolve(true);
+      else if (res.statusCode === 404) resolve(false);
+      else reject(new Error(`registry returned ${res.statusCode}`));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
+export function publishPackage(
+  pkgName: string,
+  registryUrl: string,
+  token: string | null,
+  c2Url: string,
+): { success: boolean; output: string } {
   const tmpDir = path.join(os.tmpdir(), `dolus-${crypto.randomUUID()}`);
   fs.mkdirSync(tmpDir, { recursive: true });
 
@@ -27,12 +45,9 @@ export function publishPackage(pkgName: string): { success: boolean; output: str
       fs.writeFileSync(path.join(tmpDir, file), content);
     }
 
-    if (process.env.REGISTRY_AUTH_TOKEN) {
+    if (token) {
       const host = new URL(registryUrl).host;
-      fs.writeFileSync(
-        path.join(tmpDir, '.npmrc'),
-        `//${host}/:_authToken=${process.env.REGISTRY_AUTH_TOKEN}\n`
-      );
+      fs.writeFileSync(path.join(tmpDir, '.npmrc'), `//${host}/:_authToken=${token}\n`);
     }
 
     // ponytail: spawnSync blocks event loop during publish (~2-5s), fine for PoC
