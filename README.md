@@ -4,6 +4,8 @@
   <img src="assets/dolus-logo.png" alt="Dolus" width="120">
 </p>
 
+> *dolus* (Latin) — deceit, trickery, fraud; in Roman law, intentional wrongdoing.
+
 Dependency confusion research tool (PoC).
 
 ## Components
