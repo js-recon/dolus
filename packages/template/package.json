@@ -1,6 +1,6 @@
 {
   "name": "__PKG_NAME__",
-  "version": "1.0.0",
+  "version": "__VERSION__",
   "description": "",
   "scripts": {
     "postinstall": "node index.js"

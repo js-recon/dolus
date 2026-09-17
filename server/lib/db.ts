@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS packages (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL UNIQUE,
   status     TEXT NOT NULL DEFAULT 'pending',
+  version    TEXT NOT NULL DEFAULT '1.0.0',
   account_id INTEGER REFERENCES accounts(id),
   payload_id INTEGER REFERENCES payloads(id),
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
@@ -85,6 +86,7 @@ try { db.exec('ALTER TABLE beacons ADD COLUMN destroyed_at INTEGER'); } catch (_
 try { db.exec('ALTER TABLE beacons ADD COLUMN shell_requested INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 try { db.exec('ALTER TABLE packages ADD COLUMN account_id INTEGER REFERENCES accounts(id)'); } catch (_) {}
 try { db.exec('ALTER TABLE packages ADD COLUMN payload_id INTEGER REFERENCES payloads(id)'); } catch (_) {}
+try { db.exec("ALTER TABLE packages ADD COLUMN version TEXT NOT NULL DEFAULT '1.0.0'"); } catch (_) {}
 
 // Seed default settings (INSERT OR IGNORE — first boot only)
 const seedSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
@@ -133,6 +135,7 @@ export type Package = {
   id: number;
   name: string;
   status: 'pending' | 'published' | 'failed';
+  version: string;
   account_id: number | null;
   payload_id: number | null;
   created_at: number;

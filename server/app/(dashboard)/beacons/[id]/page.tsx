@@ -22,8 +22,9 @@ function KV({ label, value }: { label: string; value: string | null | undefined 
   );
 }
 
-export default async function BeaconDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function BeaconDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ confirm_destroy?: string }> }) {
   const { id } = await params;
+  const { confirm_destroy } = await searchParams;
   const beacon = db.prepare('SELECT * FROM beacons WHERE id = ?').get(id) as Beacon | undefined;
   if (!beacon) notFound();
 
@@ -54,14 +55,24 @@ export default async function BeaconDetailPage({ params }: { params: Promise<{ i
           destroy command queued
           {beacon.destroyed_at && <> — {new Date(beacon.destroyed_at * 1000).toLocaleString()}</>}
         </div>
-      ) : (
-        <div className="flex items-center gap-2">
+      ) : confirm_destroy === '1' ? (
+        <div className="flex items-center gap-3 border border-red-900 bg-red-950/20 px-3 py-2 rounded">
+          <span className="text-sm text-red-300">queue destroy on next heartbeat?</span>
           <form action={destroyBeacon}>
             <input type="hidden" name="id" value={beacon.id} />
             <button type="submit" className="text-xs px-3 py-1.5 bg-red-900 hover:bg-red-700 text-red-200 rounded">
-              destroy
+              confirm
             </button>
           </form>
+          <a href={`/beacons/${beacon.id}`} className="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded">
+            cancel
+          </a>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <a href={`/beacons/${beacon.id}?confirm_destroy=1`} className="text-xs px-3 py-1.5 bg-red-900 hover:bg-red-700 text-red-200 rounded">
+            destroy
+          </a>
           <a href={`/beacons/${beacon.id}/shell`} className="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded">
             shell
           </a>

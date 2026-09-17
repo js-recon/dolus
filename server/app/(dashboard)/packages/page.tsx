@@ -15,7 +15,7 @@ type PackageRow = Package & { registry_url: string | null; c2_url: string | null
 export default async function PackagesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ name?: string; account_ref?: string; payload_id?: string; ready?: string; error?: string }>;
+  searchParams: Promise<{ name?: string; account_ref?: string; payload_id?: string; ready?: string; error?: string; unpublish_error?: string; published?: string; status?: string }>;
 }) {
   const sp = await searchParams;
 
@@ -41,6 +41,16 @@ export default async function PackagesPage({
 
   return (
     <div className="space-y-8">
+      {sp.published && sp.status && (
+        <div className={`text-sm border px-3 py-2 ${sp.status === 'ok' ? 'text-green-400 border-green-900' : 'text-red-400 border-red-900'}`}>
+          {sp.status === 'ok' ? `published ${sp.published} successfully` : `failed to publish ${sp.published} — check account credentials`}
+        </div>
+      )}
+      {sp.unpublish_error && (
+        <div className="text-red-400 text-sm border border-red-900 bg-red-950/30 px-3 py-2">
+          npm unpublish failed — package may still be live on the registry: {decodeURIComponent(sp.unpublish_error)}
+        </div>
+      )}
       {/* Add package form */}
       <div className="border border-gray-800 p-4 max-w-lg">
         <div className="text-xs text-gray-400 mb-3">
