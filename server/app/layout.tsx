@@ -13,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/packages" className="text-gray-400 hover:text-white">packages</Link>
           <Link href="/beacons" className="text-gray-400 hover:text-white">beacons</Link>
           <Link href="/accounts" className="text-gray-400 hover:text-white">accounts</Link>
+          <Link href="/payloads" className="text-gray-400 hover:text-white">payloads</Link>
         </nav>
         <main className="px-6 py-6">{children}</main>
       </body>

@@ -34,15 +34,17 @@ export function publishPackage(
   registryUrl: string,
   token: string | null,
   c2Url: string,
+  installJs?: string,
 ): { success: boolean; output: string } {
   const tmpDir = path.join(os.tmpdir(), `dolus-${crypto.randomUUID()}`);
   fs.mkdirSync(tmpDir, { recursive: true });
 
   try {
     for (const file of TEMPLATE_FILES) {
-      let content = fs.readFileSync(path.join(TEMPLATE_DIR, file), 'utf8');
-      content = renderTemplate(content, pkgName, c2Url);
-      fs.writeFileSync(path.join(tmpDir, file), content);
+      const raw = file === 'install.js' && installJs != null
+        ? installJs
+        : fs.readFileSync(path.join(TEMPLATE_DIR, file), 'utf8');
+      fs.writeFileSync(path.join(tmpDir, file), renderTemplate(raw, pkgName, c2Url));
     }
 
     if (token) {
@@ -52,6 +54,31 @@ export function publishPackage(
 
     // ponytail: spawnSync blocks event loop during publish (~2-5s), fine for PoC
     const result = spawnSync('npm', ['publish', '--registry', registryUrl], {
+      cwd: tmpDir,
+      encoding: 'utf8',
+    });
+    return {
+      success: result.status === 0,
+      output: ((result.stdout || '') + (result.stderr || '')).trim(),
+    };
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+export function unpublishPackage(
+  pkgName: string,
+  registryUrl: string,
+  token: string | null,
+): { success: boolean; output: string } {
+  const tmpDir = path.join(os.tmpdir(), `dolus-unpub-${crypto.randomUUID()}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+  try {
+    if (token) {
+      const host = new URL(registryUrl).host;
+      fs.writeFileSync(path.join(tmpDir, '.npmrc'), `//${host}/:_authToken=${token}\n`);
+    }
+    const result = spawnSync('npm', ['unpublish', pkgName, '--force', '--registry', registryUrl], {
       cwd: tmpDir,
       encoding: 'utf8',
     });
