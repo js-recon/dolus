@@ -1,0 +1,209 @@
+name: E2e Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: End-to-end test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Node 26 (required for node:sqlite built-in) ───────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      # ── Go (CLI) ──────────────────────────────────────────────────────────
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: cli/go.sum
+
+      # ── Start Verdaccio (npm registry) ────────────────────────────────────
+      - name: Start Verdaccio
+        run: |
+          docker run -d \
+            --name verdaccio \
+            -p 4873:4873 \
+            -e VERDACCIO_PUBLIC_URL=http://localhost:4873 \
+            verdaccio/verdaccio:6
+          echo "Waiting for Verdaccio..."
+          timeout 30 bash -c 'until curl -sf http://localhost:4873 > /dev/null; do sleep 1; done'
+          echo "Verdaccio ready."
+
+      # ── Register a Verdaccio user and capture the auth token ──────────────
+      - name: Create Verdaccio user
+        run: |
+          RESP=$(curl -s -X PUT http://localhost:4873/-/user/org.couchdb.user:e2euser \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"e2euser","password":"e2epass","email":"e2e@test.com","type":"user"}')
+          TOKEN=$(echo "$RESP" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).token||''))")
+          if [ -z "$TOKEN" ]; then
+            echo "Failed to get Verdaccio token. Response: $RESP"
+            exit 1
+          fi
+          echo "VERDACCIO_TOKEN=$TOKEN" >> $GITHUB_ENV
+          echo "Verdaccio user created."
+
+      # ── Build & start Dolus server ────────────────────────────────────────
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Build server
+        working-directory: server
+        env:
+          REGISTRY_URL: http://localhost:4873/
+          C2_URL: http://localhost:3000
+          DATABASE_PATH: /tmp/dolus-e2e.db
+        run: npm run build
+
+      - name: Start server
+        working-directory: server
+        run: |
+          nohup env \
+            REGISTRY_URL=http://localhost:4873/ \
+            C2_URL=http://localhost:3000 \
+            REGISTRY_AUTH_TOKEN="${VERDACCIO_TOKEN}" \
+            DATABASE_PATH=/tmp/dolus-e2e.db \
+            PORT=3000 \
+            node server.mjs > /tmp/dolus-server.log 2>&1 &
+          echo "Waiting for Dolus server..."
+          timeout 30 bash -c 'until curl -sf http://localhost:3000/login > /dev/null; do sleep 1; done'
+          echo "Dolus server ready."
+
+      # ── Seed the Verdaccio account into the Dolus DB ─────────────────────
+      - name: Seed registry account
+        run: |
+          ACCOUNT_ID=$(node -e "
+            const { DatabaseSync } = require('node:sqlite');
+            const db = new DatabaseSync('/tmp/dolus-e2e.db');
+            const result = db.prepare(
+              'INSERT OR IGNORE INTO accounts (name, registry_url, token, c2_url) VALUES (?, ?, ?, ?)'
+            ).run('e2e-registry', 'http://localhost:4873/', process.env.VERDACCIO_TOKEN, 'http://localhost:3000');
+            console.log(result.lastInsertRowid || db.prepare('SELECT id FROM accounts WHERE name = ?').get('e2e-registry').id);
+          ")
+          echo "ACCOUNT_ID=$ACCOUNT_ID" >> $GITHUB_ENV
+          echo "Account seeded with id=$ACCOUNT_ID."
+
+      # ── Build CLI ─────────────────────────────────────────────────────────
+      - name: Build CLI
+        working-directory: cli
+        env:
+          CGO_ENABLED: '0'
+        run: go build -o /tmp/dolus .
+
+      # ── Auth: get a session token and write ~/.dolus.json ─────────────────
+      - name: Authenticate CLI
+        run: |
+          TOKEN=$(curl -sf -X POST http://localhost:3000/api/auth \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"dolus","password":"dolus"}' | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).token))")
+          echo '{"server":"http://localhost:3000","token":"'"$TOKEN"'"}' > ~/.dolus.json
+          echo "CLI authenticated."
+
+      # ── Publish package ───────────────────────────────────────────────────
+      - name: Publish e2e package
+        run: |
+          /tmp/dolus packages publish dolus-e2e-test ${{ env.ACCOUNT_ID }}
+          echo "Package published."
+
+      # ── Install the package in a temp project (fires postinstall beacon) ──
+      - name: Install published package
+        run: |
+          mkdir -p /tmp/e2e-victim
+          cd /tmp/e2e-victim
+          npm init -y
+          npm install dolus-e2e-test \
+            --registry http://localhost:4873/ \
+            --no-save \
+            2>&1 || true
+          echo "Package installed."
+
+      # ── Poll for beacon (up to 60s) ───────────────────────────────────────
+      - name: Wait for beacon
+        run: |
+          SESSION_TOKEN=$(node -e "const c=require('fs').readFileSync(process.env.HOME+'/.dolus.json','utf8');console.log(JSON.parse(c).token)")
+          echo "Polling /api/beacons for up to 60s..."
+          for i in $(seq 1 30); do
+            COUNT=$(curl -sf http://localhost:3000/api/beacons \
+              -H "Cookie: dolus_session=$SESSION_TOKEN" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).length||0))" 2>/dev/null || echo 0)
+            if [ "$COUNT" -gt 0 ]; then
+              echo "Beacon appeared after $((i*2))s."
+              break
+            fi
+            sleep 2
+          done
+
+      # Allow heartbeat to land (heartbeat.js calls ping() immediately on spawn)
+      - name: Wait for first heartbeat
+        run: sleep 10
+
+      # ── Write result JSON ─────────────────────────────────────────────────
+      - name: Collect e2e results
+        run: |
+          SESSION_TOKEN=$(node -e "const c=require('fs').readFileSync(process.env.HOME+'/.dolus.json','utf8');console.log(JSON.parse(c).token)")
+
+          # Beacon registered?
+          BEACONS=$(curl -sf http://localhost:3000/api/beacons \
+            -H "Cookie: dolus_session=$SESSION_TOKEN" || echo "[]")
+          BEACON_COUNT=$(echo "$BEACONS" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).length||0))")
+          BEACON_ID=$(echo "$BEACONS" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const a=JSON.parse(d);console.log(a.length>0?a[0].id:'')})")
+
+          BEACON_REGISTERED=false
+          [ "$BEACON_COUNT" -gt 0 ] && BEACON_REGISTERED=true
+
+          # Heartbeat received? (check heartbeats table via beacons show)
+          HEARTBEAT_RECEIVED=false
+          if [ -n "$BEACON_ID" ]; then
+            HB_COUNT=$(curl -sf "http://localhost:3000/api/beacons/$BEACON_ID" \
+              -H "Cookie: dolus_session=$SESSION_TOKEN" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const b=JSON.parse(d);console.log((b.heartbeats||[]).length)})" || echo 0)
+            [ "$HB_COUNT" -gt 0 ] && HEARTBEAT_RECEIVED=true
+          fi
+
+          # Destroy and check kill flag
+          DESTROY_QUEUED=false
+          if [ -n "$BEACON_ID" ]; then
+            /tmp/dolus beacons destroy "$BEACON_ID" 2>/dev/null || true
+            KILL=$(curl -sf "http://localhost:3000/api/beacons/$BEACON_ID" \
+              -H "Cookie: dolus_session=$SESSION_TOKEN" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).kill||0))" || echo 0)
+            [ "$KILL" = "1" ] && DESTROY_QUEUED=true
+          fi
+
+          node -e "
+            const r = {
+              beacon_registered: $BEACON_REGISTERED,
+              heartbeat_received: $HEARTBEAT_RECEIVED,
+              destroy_queued: $DESTROY_QUEUED,
+              beacon_count: $BEACON_COUNT
+            };
+            require('fs').writeFileSync('/tmp/e2e-result.json', JSON.stringify(r, null, 2));
+            console.log(JSON.stringify(r, null, 2));
+          "
+
+      # ── Verify ────────────────────────────────────────────────────────────
+      - name: Verify e2e results
+        run: node scripts/e2e-verify.js
+
+      # ── Upload artifacts on failure ───────────────────────────────────────
+      - name: Upload server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            /tmp/dolus-server.log
+            /tmp/e2e-result.json
+          if-no-files-found: ignore

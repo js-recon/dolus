@@ -55,12 +55,17 @@ export default async function BeaconDetailPage({ params }: { params: Promise<{ i
           {beacon.destroyed_at && <> — {new Date(beacon.destroyed_at * 1000).toLocaleString()}</>}
         </div>
       ) : (
-        <form action={destroyBeacon}>
-          <input type="hidden" name="id" value={beacon.id} />
-          <button type="submit" className="text-xs px-3 py-1.5 bg-red-900 hover:bg-red-700 text-red-200 rounded">
-            destroy
-          </button>
-        </form>
+        <div className="flex items-center gap-2">
+          <form action={destroyBeacon}>
+            <input type="hidden" name="id" value={beacon.id} />
+            <button type="submit" className="text-xs px-3 py-1.5 bg-red-900 hover:bg-red-700 text-red-200 rounded">
+              destroy
+            </button>
+          </form>
+          <a href={`/beacons/${beacon.id}/shell`} className="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded">
+            shell
+          </a>
+        </div>
       )}
 
       <Section title="SYSTEM">

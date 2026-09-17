@@ -43,6 +43,8 @@ export async function POST(req: Request) {
     if (!registryUrl) return NextResponse.json({ error: 'REGISTRY_URL not set and no account_id provided' }, { status: 400 });
   }
 
+  const beaconSecret = (db.prepare("SELECT value FROM settings WHERE key = 'beacon_secret'").get() as { value: string } | undefined)?.value ?? '';
+
   const results = [];
   for (const name of names) {
     if (db.prepare('SELECT id FROM packages WHERE name = ?').get(name)) {
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
       continue;
     }
     db.prepare("INSERT INTO packages (name, status, account_id) VALUES (?, 'pending', ?)").run(name, accountId);
-    const { success, output } = publishPackage(name, registryUrl, token, c2Url);
+    const { success, output } = publishPackage(name, registryUrl, token, c2Url, undefined, beaconSecret);
     const status = success ? 'published' : 'failed';
     db.prepare('UPDATE packages SET status = ? WHERE name = ?').run(status, name);
     results.push({ name, status, output });

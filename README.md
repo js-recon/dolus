@@ -1,5 +1,9 @@
 # Dolus
 
+<p align="center">
+  <img src="assets/dolus-logo.png" alt="Dolus" width="120">
+</p>
+
 Dependency confusion research tool (PoC).
 
 ## Components
@@ -41,19 +45,21 @@ cd cli
 go build -o dolus .
 ```
 
-```bash
-export DOLUS_SERVER_URL=http://localhost:3000
+```
+dolus login <server>                    authenticate and store token
+dolus logout                            clear stored credentials
 
-dolus package add my-pkg-name       # publish a package
-dolus package list                  # list registered packages
-dolus beacon list                   # list all beacons
-dolus beacon view 1                 # inspect a specific beacon
+dolus packages                          list packages
+dolus packages publish <name>           publish a package
+dolus packages delete <id>              delete and unpublish a package
+
+dolus beacons                           list active beacons
+dolus beacons show <id>                 show beacon details + heartbeat history
+dolus beacons destroy <id>              queue beacon for self-destruction
+dolus beacons shell <id>                open interactive shell on a beacon
 ```
 
-Config can also live in `~/.dolus/config.json`:
-```json
-{ "server_url": "http://localhost:3000" }
-```
+Credentials are stored in `~/.dolus.json`.
 
 ## Package template
 
