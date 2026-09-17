@@ -16,10 +16,10 @@ export default async function PackageDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; confirm_delete?: string }>;
 }) {
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, confirm_delete } = await searchParams;
 
   const pkg = db.prepare(`
     SELECT p.*, a.registry_url, a.c2_url, pl.name AS payload_name
@@ -100,13 +100,29 @@ export default async function PackageDetailPage({
       {/* Delete */}
       <div className="border border-red-950 p-4">
         <div className="text-xs text-gray-400 mb-3">DANGER</div>
-        <form action={deletePackageAction}>
-          <input type="hidden" name="id" value={pkg.id} />
-          <button type="submit" className="text-sm px-3 py-1 border border-red-800 text-red-400 hover:bg-red-900 hover:text-red-200 transition-colors">
-            delete &amp; unpublish
-          </button>
-        </form>
-        <p className="text-gray-600 text-xs mt-2">removes from Dolus DB and unpublishes from the registry</p>
+        {confirm_delete === '1' ? (
+          <div className="space-y-3">
+            <p className="text-sm text-red-300">Delete <span className="font-bold">{pkg.name}</span> and unpublish from registry?</p>
+            <div className="flex gap-3">
+              <form action={deletePackageAction}>
+                <input type="hidden" name="id" value={pkg.id} />
+                <button type="submit" className="text-sm px-3 py-1 bg-red-900 border border-red-700 text-red-200 hover:bg-red-700 transition-colors">
+                  yes, delete
+                </button>
+              </form>
+              <Link href={`/packages/${pkg.id}`} className="text-sm px-3 py-1 border border-gray-700 text-gray-400 hover:border-gray-500 hover:text-white transition-colors">
+                cancel
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <>
+            <Link href={`/packages/${pkg.id}?confirm_delete=1`} className="text-sm px-3 py-1 border border-red-800 text-red-400 hover:bg-red-900 hover:text-red-200 transition-colors inline-block">
+              delete &amp; unpublish
+            </Link>
+            <p className="text-gray-600 text-xs mt-2">removes from Dolus DB and unpublishes from the registry</p>
+          </>
+        )}
       </div>
     </div>
   );

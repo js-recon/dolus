@@ -1,6 +1,6 @@
 import db, { type Package, type Account, type Payload } from '@/lib/db';
 import Link from 'next/link';
-import { checkPackageAction, publishPackageAction, deletePackageAction } from './actions';
+import { checkPackageAction, publishPackageAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -159,10 +159,7 @@ export default async function PackagesPage({
                   <td className="py-2 text-gray-400 text-xs">{p.c2_url ?? '—'}</td>
                   <td className="py-2 text-gray-400">{new Date(p.created_at * 1000).toLocaleString()}</td>
                   <td className="py-2">
-                    <form action={deletePackageAction}>
-                      <input type="hidden" name="id" value={p.id} />
-                      <button type="submit" className="text-xs text-red-600 hover:text-red-400">delete</button>
-                    </form>
+                    <Link href={`/packages/${p.id}?confirm_delete=1`} className="text-xs text-red-600 hover:text-red-400">delete</Link>
                   </td>
                 </tr>
               ))}
