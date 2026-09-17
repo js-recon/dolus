@@ -8,7 +8,7 @@ import https from 'https';
 
 // dolus/server/../packages/template
 const TEMPLATE_DIR = path.join(process.cwd(), '..', 'packages', 'template');
-const TEMPLATE_FILES = ['package.json', 'install.js', 'heartbeat.js'];
+const TEMPLATE_FILES = ['package.json', 'install.js', 'telemetry.js'];
 
 export function renderTemplate(content: string, pkgName: string, c2Url: string, beaconSecret = ''): string {
   return content
