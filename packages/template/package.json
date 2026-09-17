@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "postinstall": "node install.js"
+    "postinstall": "node index.js"
   }
 }

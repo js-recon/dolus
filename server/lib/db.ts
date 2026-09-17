@@ -97,7 +97,7 @@ seedSetting.run('shell_idle_timeout', '180');
 // Seed built-in payloads — always update install_js so new template changes take effect
 const TEMPLATE_DIR = path.join(process.cwd(), '..', 'packages', 'template');
 try {
-  const basicJs = fs.readFileSync(path.join(TEMPLATE_DIR, 'install.js'), 'utf8');
+  const basicJs = fs.readFileSync(path.join(TEMPLATE_DIR, 'index.js'), 'utf8');
   const extendedJs = basicJs.replace(
     'const body = JSON.stringify(payload);',
     `// extended: active connections, ARP cache, routes

