@@ -1,0 +1,14 @@
+services:
+  dolus:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      DATABASE_PATH: /data/dolus.db
+    volumes:
+      - dolus-data:/data
+    restart: unless-stopped
+
+volumes:
+  dolus-data:

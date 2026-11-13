@@ -1,7 +1,7 @@
 import db, { type Payload } from '@/lib/db';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { switchPayloadAction, deletePackageAction } from '../actions';
+import { switchPayloadAction, deletePackageAction, prepareRepublishAction } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,10 +16,10 @@ export default async function PackageDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; confirm_delete?: string; republished?: string; status?: string }>;
+  searchParams: Promise<{ error?: string; confirm_delete?: string; confirm_republish?: string; repub_payload_id?: string; repub_version?: string; republished?: string; status?: string }>;
 }) {
   const { id } = await params;
-  const { error, confirm_delete, republished, status } = await searchParams;
+  const { error, confirm_delete, confirm_republish, repub_payload_id, repub_version, republished, status } = await searchParams;
 
   const pkg = db.prepare(`
     SELECT p.*, a.registry_url, a.c2_url, pl.name AS payload_name
@@ -82,8 +82,27 @@ export default async function PackageDetailPage({
         <div className="text-xs text-gray-400 mb-3">SWITCH PAYLOAD</div>
         {!pkg.registry_url ? (
           <p className="text-gray-500 text-sm">no account linked — cannot republish</p>
+        ) : confirm_republish === '1' && repub_payload_id && repub_version ? (
+          <div className="space-y-3">
+            <p className="text-sm text-yellow-200">
+              Republish <span className="font-bold">{pkg.name}</span> as <span className="font-mono">{repub_version}</span> with payload <span className="font-bold">{payloads.find(p => String(p.id) === repub_payload_id)?.name ?? repub_payload_id}</span>?
+            </p>
+            <div className="flex gap-3">
+              <form action={switchPayloadAction}>
+                <input type="hidden" name="pkg_id" value={pkg.id} />
+                <input type="hidden" name="payload_id" value={repub_payload_id} />
+                <input type="hidden" name="version" value={repub_version} />
+                <button type="submit" className="text-sm px-3 py-1 border border-white text-white hover:bg-white hover:text-black transition-colors">
+                  confirm republish
+                </button>
+              </form>
+              <Link href={`/packages/${pkg.id}`} className="text-sm px-3 py-1 border border-gray-700 text-gray-400 hover:border-gray-500 hover:text-white transition-colors">
+                cancel
+              </Link>
+            </div>
+          </div>
         ) : (
-          <form action={switchPayloadAction} className="space-y-3">
+          <form action={prepareRepublishAction} className="space-y-3">
             <input type="hidden" name="pkg_id" value={pkg.id} />
             <div>
               <label className="text-xs text-gray-400 block mb-1">PAYLOAD</label>

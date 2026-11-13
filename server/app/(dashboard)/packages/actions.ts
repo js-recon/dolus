@@ -80,6 +80,13 @@ export async function deletePackageAction(formData: FormData) {
   redirect('/packages');
 }
 
+export async function prepareRepublishAction(formData: FormData) {
+  const pkgId = String(formData.get('pkg_id'));
+  const payloadId = String(formData.get('payload_id'));
+  const version = String(formData.get('version') || '1.0.0').trim();
+  redirect(`/packages/${pkgId}?confirm_republish=1&repub_payload_id=${encodeURIComponent(payloadId)}&repub_version=${encodeURIComponent(version)}`);
+}
+
 export async function switchPayloadAction(formData: FormData) {
   const pkgId = String(formData.get('pkg_id'));
   const payloadId = String(formData.get('payload_id'));

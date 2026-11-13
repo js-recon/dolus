@@ -1,0 +1,4 @@
+server/node_modules
+server/.next
+server/dolus.db*
+server/__tests__
