@@ -9,6 +9,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Link href="/" className="flex items-center"><img src="/dolus-logo.png" alt="Dolus" className="h-7 w-7 object-contain" /></Link>
         <Link href="/" className="text-gray-400 hover:text-white">overview</Link>
         <Link href="/packages" className="text-gray-400 hover:text-white">packages</Link>
+        <Link href="/campaigns" className="text-gray-400 hover:text-white">campaigns</Link>
         <Link href="/beacons" className="text-gray-400 hover:text-white">beacons</Link>
         <Link href="/accounts" className="text-gray-400 hover:text-white">accounts</Link>
         <Link href="/payloads" className="text-gray-400 hover:text-white">payloads</Link>

