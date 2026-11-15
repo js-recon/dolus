@@ -1,4 +1,4 @@
-import db, { type Account, type Campaign } from '@/lib/db';
+import db, { type Account, type Campaign, type Payload } from '@/lib/db';
 import Link from 'next/link';
 import { publishCampaignAction, deleteCampaignAction } from './actions';
 
@@ -20,6 +20,7 @@ export default async function CampaignsPage({
 }) {
   const sp = await searchParams;
   const accounts = db.prepare('SELECT * FROM accounts ORDER BY name').all() as Account[];
+  const payloads = db.prepare('SELECT * FROM payloads ORDER BY builtin DESC, name ASC').all() as Payload[];
   const campaigns = db.prepare(`
     SELECT c.*, a.name AS account_name,
       (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS package_count
@@ -55,18 +56,24 @@ export default async function CampaignsPage({
             <option value="">account</option>
             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
-          <select name="depth" className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm w-24">
+          <select name="depth" defaultValue="1" className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm w-24">
             <option value="0">depth 0</option>
-            <option value="1" selected>depth 1</option>
+            <option value="1">depth 1</option>
             <option value="2">depth 2</option>
             <option value="3">depth 3</option>
+          </select>
+        </div>
+        <div className="flex gap-3 items-center">
+          <select name="payload_id" className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm flex-1">
+            <option value="">payload (legacy template)</option>
+            {payloads.map(p => <option key={p.id} value={p.id}>{p.name}{p.builtin ? ' (built-in)' : ''}</option>)}
           </select>
           <button type="submit" className="bg-white text-black px-4 py-1.5 rounded text-sm font-medium hover:bg-gray-200">
             create
           </button>
         </div>
         <p className="text-gray-500 text-xs">
-          depth = shell layers between entrypoint and capability packages (0 = direct, 1 = one shell each, etc.)
+          payload = AST-split the selected payload into capability packages. Leave empty for legacy hardcoded templates.
         </p>
       </form>
 

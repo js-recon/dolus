@@ -30,6 +30,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   if (!campaign) return <p className="text-red-500">campaign not found</p>;
 
   const packages = db.prepare('SELECT * FROM packages WHERE campaign_id = ? ORDER BY id').all(id) as Package[];
+  const splitAnalysis = campaign.split_analysis ? JSON.parse(campaign.split_analysis as string) : null;
 
   // Group by role for display
   const entrypoint = packages.find(p => p.role === 'entrypoint');
@@ -81,6 +82,27 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
           {shells.length === 0 && <p className="text-gray-500 text-xs">none (depth 0 — direct dependencies)</p>}
         </div>
       </div>
+
+      {splitAnalysis && (
+        <div className="mb-6">
+          <h2 className="text-sm font-medium text-gray-400 mb-2">split analysis (AST)</h2>
+          <div className="border border-gray-800 rounded p-3 text-sm space-y-2">
+            <p>dangerous: <span className="text-red-400">{splitAnalysis.found?.join(', ')}</span></p>
+            <p>safe (kept in entrypoint): <span className="text-green-400">{splitAnalysis.safe?.join(', ')}</span></p>
+            {splitAnalysis.capFiles && (
+              <div className="mt-2">
+                <p className="text-gray-500 text-xs mb-1">cap file sizes:</p>
+                {splitAnalysis.capFiles.map((cf: { role: string; lines: number }) => (
+                  <span key={cf.role} className="inline-block mr-3 text-xs text-gray-400">{cf.role}: {cf.lines} lines</span>
+                ))}
+              </div>
+            )}
+            {splitAnalysis.entrypointLines && (
+              <p className="text-gray-500 text-xs">entrypoint: {splitAnalysis.entrypointLines} lines</p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 border-t border-gray-800 pt-4">
         <form action={deleteCampaignAction}>

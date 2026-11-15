@@ -20,7 +20,9 @@ export async function publishCampaignAction(formData: FormData) {
 
   const beaconSecret = (db.prepare("SELECT value FROM settings WHERE key = 'beacon_secret'").get() as { value: string } | undefined)?.value ?? '';
 
-  const result = publishCampaign(name, accountId, depth, beaconSecret);
+  const payloadId = Number(formData.get('payload_id') || 0) || undefined;
+
+  const result = publishCampaign(name, accountId, depth, beaconSecret, payloadId);
   redirect(`/campaigns?created=${encodeURIComponent(name)}&status=${result.success ? 'ok' : 'fail'}`);
 }
 

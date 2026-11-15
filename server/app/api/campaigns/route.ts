@@ -15,7 +15,7 @@ export function GET() {
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  const { name, account_id, depth = 1 } = body;
+  const { name, account_id, depth = 1, payload_id } = body;
 
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
   if (!account_id) return NextResponse.json({ error: 'account_id required' }, { status: 400 });
@@ -30,6 +30,6 @@ export async function POST(req: Request) {
 
   const beaconSecret = (db.prepare("SELECT value FROM settings WHERE key = 'beacon_secret'").get() as { value: string } | undefined)?.value ?? '';
 
-  const result = publishCampaign(name, account_id, Math.min(Math.max(depth, 0), 3), beaconSecret);
+  const result = publishCampaign(name, account_id, Math.min(Math.max(depth, 0), 3), beaconSecret, payload_id || undefined);
   return NextResponse.json(result);
 }

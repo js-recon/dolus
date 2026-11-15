@@ -99,6 +99,8 @@ try { db.exec('ALTER TABLE packages ADD COLUMN payload_id INTEGER REFERENCES pay
 try { db.exec("ALTER TABLE packages ADD COLUMN version TEXT NOT NULL DEFAULT '1.0.0'"); } catch (_) {}
 try { db.exec('ALTER TABLE packages ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id)'); } catch (_) {}
 try { db.exec('ALTER TABLE packages ADD COLUMN role TEXT'); } catch (_) {}
+try { db.exec('ALTER TABLE campaigns ADD COLUMN payload_id INTEGER REFERENCES payloads(id)'); } catch (_) {}
+try { db.exec('ALTER TABLE campaigns ADD COLUMN split_analysis TEXT'); } catch (_) {}
 
 // Seed default settings (INSERT OR IGNORE — first boot only)
 const seedSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
@@ -149,6 +151,8 @@ export type Campaign = {
   account_id: number;
   depth: number;
   status: 'pending' | 'published' | 'failed' | 'partial';
+  payload_id: number | null;
+  split_analysis: string | null;
   created_at: number;
 };
 
