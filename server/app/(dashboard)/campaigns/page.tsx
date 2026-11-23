@@ -5,10 +5,10 @@ import { publishCampaignAction, deleteCampaignAction } from './actions';
 export const dynamic = 'force-dynamic';
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: 'text-yellow-400',
-  published: 'text-green-400',
-  failed: 'text-red-500',
-  partial: 'text-orange-400',
+  pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+  published: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  failed: 'bg-red-500/10 text-red-400 border-red-500/20',
+  partial: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
 };
 
 type CampaignRow = Campaign & { account_name: string | null; package_count: number };
@@ -36,27 +36,32 @@ export default async function CampaignsPage({
 
   return (
     <div className="max-w-4xl">
-      <h1 className="text-xl font-bold mb-4">campaigns</h1>
-      <p className="text-gray-400 text-sm mb-6">
+      <h1 className="text-xl font-semibold tracking-tight mb-2">Campaigns</h1>
+      <p className="text-gray-500 text-sm mb-6">
         Capability-split package chains. Each campaign publishes multiple packages where each uses at most one dangerous built-in module.
       </p>
 
-      {sp.error && <p className="text-red-500 text-sm mb-4">{errorMsg[sp.error] || sp.error}</p>}
+      {sp.error && (
+        <div className="text-sm rounded-lg border border-red-500/20 bg-red-500/5 text-red-400 px-4 py-3 mb-4">
+          {errorMsg[sp.error] || sp.error}
+        </div>
+      )}
       {sp.created && (
-        <p className={`text-sm mb-4 ${sp.status === 'ok' ? 'text-green-400' : 'text-orange-400'}`}>
+        <div className={`text-sm rounded-lg border px-4 py-3 mb-4 ${sp.status === 'ok' ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' : 'border-orange-500/20 bg-orange-500/5 text-orange-400'}`}>
           campaign &quot;{sp.created}&quot; {sp.status === 'ok' ? 'published' : 'partially published'}
-        </p>
+        </div>
       )}
 
-      <form action={publishCampaignAction} className="border border-gray-800 rounded p-4 mb-8 space-y-3">
+      <form action={publishCampaignAction} className="rounded-lg bg-gray-900/50 border border-gray-800/50 p-5 mb-8 space-y-3">
+        <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Create Campaign</h2>
         <div className="flex gap-3">
           <input name="name" placeholder="campaign base name" required
-            className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm flex-1" />
-          <select name="account_id" required className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm">
+            className="bg-black border border-gray-700 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:border-gray-500 transition-colors" />
+          <select name="account_id" required className="bg-black border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gray-500 transition-colors">
             <option value="">account</option>
             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
-          <select name="depth" defaultValue="1" className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm w-24">
+          <select name="depth" defaultValue="1" className="bg-black border border-gray-700 rounded-lg px-3 py-2 text-sm w-24 focus:outline-none focus:border-gray-500 transition-colors">
             <option value="0">depth 0</option>
             <option value="1">depth 1</option>
             <option value="2">depth 2</option>
@@ -64,53 +69,59 @@ export default async function CampaignsPage({
           </select>
         </div>
         <div className="flex gap-3 items-center">
-          <select name="payload_id" className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm flex-1">
+          <select name="payload_id" className="bg-black border border-gray-700 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:border-gray-500 transition-colors">
             <option value="">payload (legacy template)</option>
             {payloads.map(p => <option key={p.id} value={p.id}>{p.name}{p.builtin ? ' (built-in)' : ''}</option>)}
           </select>
-          <button type="submit" className="bg-white text-black px-4 py-1.5 rounded text-sm font-medium hover:bg-gray-200">
+          <button type="submit" className="bg-white text-black px-5 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
             create
           </button>
         </div>
-        <p className="text-gray-500 text-xs">
+        <p className="text-gray-600 text-xs">
           payload = AST-split the selected payload into capability packages. Leave empty for legacy hardcoded templates.
         </p>
       </form>
 
       {campaigns.length === 0 ? (
-        <p className="text-gray-500 text-sm">no campaigns yet</p>
+        <p className="text-gray-600 text-sm">no campaigns yet</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-500 border-b border-gray-800">
-              <th className="pb-2">name</th>
-              <th className="pb-2">account</th>
-              <th className="pb-2">depth</th>
-              <th className="pb-2">packages</th>
-              <th className="pb-2">status</th>
-              <th className="pb-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {campaigns.map(c => (
-              <tr key={c.id} className="border-b border-gray-800/50">
-                <td className="py-2">
-                  <Link href={`/campaigns/${c.id}`} className="text-blue-400 hover:underline">{c.name}</Link>
-                </td>
-                <td className="py-2 text-gray-400">{c.account_name || '—'}</td>
-                <td className="py-2 text-gray-400">{c.depth}</td>
-                <td className="py-2 text-gray-400">{c.package_count}</td>
-                <td className={`py-2 ${STATUS_STYLE[c.status] || ''}`}>{c.status}</td>
-                <td className="py-2">
-                  <form action={deleteCampaignAction} className="inline">
-                    <input type="hidden" name="id" value={c.id} />
-                    <button type="submit" className="text-red-500 hover:text-red-400 text-xs">delete</button>
-                  </form>
-                </td>
+        <div className="rounded-lg border border-gray-800/50 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-500 text-xs border-b border-gray-800/50 bg-gray-900/30">
+                <th className="px-4 py-2.5 font-medium">Name</th>
+                <th className="px-4 py-2.5 font-medium">Account</th>
+                <th className="px-4 py-2.5 font-medium">Depth</th>
+                <th className="px-4 py-2.5 font-medium">Packages</th>
+                <th className="px-4 py-2.5 font-medium">Status</th>
+                <th className="px-4 py-2.5 font-medium w-16"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {campaigns.map(c => (
+                <tr key={c.id} className="border-b border-gray-800/30 hover:bg-gray-900/40 transition-colors">
+                  <td className="px-4 py-3">
+                    <Link href={`/campaigns/${c.id}`} className="text-gray-200 hover:text-white transition-colors">{c.name}</Link>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{c.account_name || '—'}</td>
+                  <td className="px-4 py-3 text-gray-500">{c.depth}</td>
+                  <td className="px-4 py-3 text-gray-500">{c.package_count}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${STATUS_STYLE[c.status] || ''}`}>
+                      {c.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <form action={deleteCampaignAction} className="inline">
+                      <input type="hidden" name="id" value={c.id} />
+                      <button type="submit" className="text-red-600/60 hover:text-red-400 text-xs transition-colors">delete</button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
