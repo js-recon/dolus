@@ -62,7 +62,7 @@ export async function publishPackageAction(formData: FormData) {
   const beaconSecret = (db.prepare("SELECT value FROM settings WHERE key = 'beacon_secret'").get() as { value: string } | undefined)?.value ?? '';
 
   db.prepare("INSERT INTO packages (name, status, account_id, payload_id) VALUES (?, 'pending', ?, ?)").run(name, account.id, payload?.id ?? null);
-  const { success } = publishPackage(name, account.registry_url, account.token, account.c2_url, payload?.install_js, beaconSecret);
+  const { success } = await publishPackage(name, account.registry_url, account.token, account.c2_url, payload?.install_js, beaconSecret, '1.0.0', (payload?.lang as 'js' | 'ts') ?? 'js');
   db.prepare('UPDATE packages SET status = ? WHERE name = ?').run(success ? 'published' : 'failed', name);
 
   redirect(`/packages?published=${encodeURIComponent(name)}&status=${success ? 'ok' : 'fail'}`);
@@ -122,7 +122,7 @@ export async function switchPayloadAction(formData: FormData) {
 
   // unpublish existing version, then republish with new payload + version
   unpublishPackage(pkg.name, pkg.registry_url!, pkg.token ?? null);
-  const { success } = publishPackage(pkg.name, pkg.registry_url!, pkg.token ?? null, pkg.c2_url!, payload!.install_js, beaconSecret, version);
+  const { success } = await publishPackage(pkg.name, pkg.registry_url!, pkg.token ?? null, pkg.c2_url!, payload!.install_js, beaconSecret, version, (payload!.lang as 'js' | 'ts') ?? 'js');
 
   db.prepare('UPDATE packages SET payload_id = ?, status = ?, version = ? WHERE id = ?').run(payloadId, success ? 'published' : 'failed', version, pkgId);
   redirect(`/packages/${pkgId}?republished=1&status=${success ? 'ok' : 'fail'}`);

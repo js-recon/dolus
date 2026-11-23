@@ -6,8 +6,9 @@ export async function addPayloadAction(formData: FormData) {
   const name = String(formData.get('name') || '').trim();
   const description = String(formData.get('description') || '').trim() || null;
   const install_js = String(formData.get('install_js') || '').trim();
+  const lang = String(formData.get('lang') || 'js');
   if (!name || !install_js) redirect('/payloads/new?error=missing');
-  db.prepare('INSERT INTO payloads (name, description, install_js) VALUES (?, ?, ?)').run(name, description, install_js);
+  db.prepare('INSERT INTO payloads (name, description, install_js, lang) VALUES (?, ?, ?, ?)').run(name, description, install_js, lang);
   redirect('/payloads');
 }
 
@@ -16,8 +17,9 @@ export async function updatePayloadAction(formData: FormData) {
   const name = String(formData.get('name') || '').trim();
   const description = String(formData.get('description') || '').trim() || null;
   const install_js = String(formData.get('install_js') || '').trim();
+  const lang = String(formData.get('lang') || 'js');
   if (!name || !install_js) redirect(`/payloads/${id}/edit?error=missing`);
-  db.prepare('UPDATE payloads SET name = ?, description = ?, install_js = ? WHERE id = ? AND builtin = 0').run(name, description, install_js, id);
+  db.prepare('UPDATE payloads SET name = ?, description = ?, install_js = ?, lang = ? WHERE id = ? AND builtin = 0').run(name, description, install_js, lang, id);
   redirect('/payloads');
 }
 

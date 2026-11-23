@@ -77,6 +77,19 @@ function stmtSafeRefs(
 export function splitPayload(source: string): SplitResult {
   const ast = parse(source, { sourceType: 'script', plugins: [] });
 
+  // Unwrap webpack IIFE wrapper: (() => { ... })()
+  let body = ast.program.body;
+  if (body.length === 1 && t.isExpressionStatement(body[0])) {
+    const expr = body[0].expression;
+    if (
+      t.isCallExpression(expr) &&
+      (t.isArrowFunctionExpression(expr.callee) || t.isFunctionExpression(expr.callee)) &&
+      t.isBlockStatement(expr.callee.body)
+    ) {
+      body = expr.callee.body.body;
+    }
+  }
+
   // ── 1. Collect require bindings ──
   const bindingToModule = new Map<string, string>();       // varName → raw module
   const bindingToRole = new Map<string, string>();         // varName → role
@@ -88,8 +101,8 @@ export function splitPayload(source: string): SplitResult {
   // Track per-module binding name (for cap file generation)
   const moduleBindingName = new Map<string, string>();     // module → binding var name
 
-  for (let i = 0; i < ast.program.body.length; i++) {
-    const stmt = ast.program.body[i];
+  for (let i = 0; i < body.length; i++) {
+    const stmt = body[i];
     if (!t.isVariableDeclaration(stmt)) continue;
 
     for (const decl of stmt.declarations) {
@@ -131,9 +144,9 @@ export function splitPayload(source: string): SplitResult {
   type TaggedStmt = { idx: number; stmt: t.Statement; roles: Set<string>; safeRefs: Set<string> };
   const tagged: TaggedStmt[] = [];
 
-  for (let i = 0; i < ast.program.body.length; i++) {
+  for (let i = 0; i < body.length; i++) {
     if (requireIdxs.has(i)) continue;
-    const stmt = ast.program.body[i];
+    const stmt = body[i];
     const roles = stmtCapRoles(stmt, allBindingToRole);
     const safeRefs = stmtSafeRefs(stmt, safeBindings);
     tagged.push({ idx: i, stmt, roles, safeRefs });

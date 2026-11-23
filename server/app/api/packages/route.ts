@@ -52,7 +52,7 @@ export async function POST(req: Request) {
       continue;
     }
     db.prepare("INSERT INTO packages (name, status, account_id) VALUES (?, 'pending', ?)").run(name, accountId);
-    const { success, output } = publishPackage(name, registryUrl, token, c2Url, undefined, beaconSecret);
+    const { success, output } = await publishPackage(name, registryUrl, token, c2Url, undefined, beaconSecret);
     const status = success ? 'published' : 'failed';
     db.prepare('UPDATE packages SET status = ? WHERE name = ?').run(status, name);
     results.push({ name, status, output });

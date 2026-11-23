@@ -30,6 +30,6 @@ export async function POST(req: Request) {
 
   const beaconSecret = (db.prepare("SELECT value FROM settings WHERE key = 'beacon_secret'").get() as { value: string } | undefined)?.value ?? '';
 
-  const result = publishCampaign(name, account_id, Math.min(Math.max(depth, 0), 3), beaconSecret, payload_id || undefined);
+  const result = await publishCampaign(name, account_id, Math.min(Math.max(depth, 0), 3), beaconSecret, payload_id || undefined);
   return NextResponse.json(result);
 }

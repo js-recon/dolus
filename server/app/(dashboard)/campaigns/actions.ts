@@ -22,7 +22,7 @@ export async function publishCampaignAction(formData: FormData) {
 
   const payloadId = Number(formData.get('payload_id') || 0) || undefined;
 
-  const result = publishCampaign(name, accountId, depth, beaconSecret, payloadId);
+  const result = await publishCampaign(name, accountId, depth, beaconSecret, payloadId);
   redirect(`/campaigns?created=${encodeURIComponent(name)}&status=${result.success ? 'ok' : 'fail'}`);
 }
 
