@@ -2,9 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-
-// eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
-const loadModule = new Function('name', 'return require(name)') as (name: string) => any;
+// @ts-expect-error — __non_webpack_require__ is a webpack-specific escape hatch to bypass Next.js bundling
+const _require: NodeRequire = typeof __non_webpack_require__ !== 'undefined' ? __non_webpack_require__ : require;
+// Use createRequire from server dir so standalone webpack/ts-loader are found (not Next.js's bundled webpack)
+const { createRequire: _cR } = _require('module') as typeof import('module');
+const loadModule = _cR(path.join(process.cwd(), 'node_modules', 'x'));
 
 const DEV_LIB_DIR = path.join(process.cwd(), '..', 'packages', 'dolus-dev');
 
@@ -13,7 +15,24 @@ export async function compilePayload(tsSource: string): Promise<{ success: boole
   fs.mkdirSync(tmpDir, { recursive: true });
 
   try {
-    fs.writeFileSync(path.join(tmpDir, 'payload.ts'), tsSource);
+    // Wrap body (non-import lines) in async IIFE so top-level await works in CJS output
+    let wrappedSource = tsSource;
+    if (tsSource.includes('await ')) {
+      const lines = tsSource.split('\n');
+      const imports: string[] = [];
+      const body: string[] = [];
+      for (const line of lines) {
+        if (/^\s*(import\s|export\s)/.test(line) && body.length === 0) {
+          imports.push(line);
+        } else {
+          body.push(line);
+        }
+      }
+      if (body.some(l => l.includes('await '))) {
+        wrappedSource = [...imports, '(async () => {', ...body, '})();'].join('\n');
+      }
+    }
+    fs.writeFileSync(path.join(tmpDir, 'payload.ts'), wrappedSource);
     fs.writeFileSync(path.join(tmpDir, 'tsconfig.json'), JSON.stringify({
       compilerOptions: {
         target: 'ES2022',
@@ -55,6 +74,9 @@ export async function compilePayload(tsSource: string): Promise<{ success: boole
         concatenateModules: true,
       },
       plugins: [new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 })],
+      resolveLoader: {
+        modules: [path.join(process.cwd(), 'node_modules')],
+      },
       module: {
         rules: [{ test: /\.ts$/, use: { loader: 'ts-loader', options: { configFile: path.join(tmpDir, 'tsconfig.json'), transpileOnly: true } } }],
       },
@@ -64,7 +86,7 @@ export async function compilePayload(tsSource: string): Promise<{ success: boole
       },
     };
 
-    return new Promise((resolve) => {
+    const result = await new Promise<{ success: boolean; output: string; code?: string }>((resolve) => {
       webpack(config, (err: Error | null, stats: any) => {
         if (err) {
           resolve({ success: false, output: err.message });
@@ -83,9 +105,10 @@ export async function compilePayload(tsSource: string): Promise<{ success: boole
         }
       });
     });
-  } catch (e) {
-    return { success: false, output: `compiler error: ${e}` };
-  } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    return result;
+  } catch (e) {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    return { success: false, output: `compiler error: ${e}` };
   }
 }
