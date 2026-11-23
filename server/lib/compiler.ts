@@ -36,7 +36,7 @@ export async function compilePayload(tsSource: string): Promise<{ success: boole
     fs.writeFileSync(path.join(tmpDir, 'tsconfig.json'), JSON.stringify({
       compilerOptions: {
         target: 'ES2022',
-        module: 'commonjs',
+        module: 'esnext',
         strict: false,
         esModuleInterop: true,
         skipLibCheck: true,
