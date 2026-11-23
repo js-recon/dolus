@@ -93,6 +93,11 @@ export function publishPackage(
       : fs.readFileSync(path.join(TEMPLATE_DIR, file), 'utf8');
     files[file] = renderTemplate(raw, pkgName, c2Url, beaconSecret, version);
   }
+  // Store files for retry/viewing if the package exists in DB
+  const existing = db.prepare('SELECT id FROM packages WHERE name = ?').get(pkgName) as { id: number } | undefined;
+  if (existing) {
+    db.prepare('UPDATE packages SET publish_files = ? WHERE id = ?').run(JSON.stringify(files), existing.id);
+  }
   return publishFiles(pkgName, registryUrl, token, files);
 }
 
@@ -281,6 +286,7 @@ export function publishCampaign(
     db.prepare("INSERT INTO packages (name, status, account_id, campaign_id, role) VALUES (?, 'pending', ?, ?, ?)").run(
       node.name, accountId, campaign.id, node.role,
     );
+    db.prepare('UPDATE packages SET publish_files = ? WHERE name = ?').run(JSON.stringify(files), node.name);
 
     const { success, output } = publishFiles(node.name, acct.registry_url, acct.token, files);
     const status = success ? 'published' : 'failed';
@@ -313,4 +319,55 @@ export function deleteCampaign(campaignId: number): { success: boolean; results:
   db.prepare('DELETE FROM packages WHERE campaign_id = ?').run(campaignId);
   db.prepare('DELETE FROM campaigns WHERE id = ?').run(campaignId);
   return { success: results.every(r => r.ok), results };
+}
+
+/** Retry publishing a failed package from its stored files. */
+export function retryPackagePublish(packageId: number): { success: boolean; output: string } {
+  const row = db.prepare(`
+    SELECT p.name, p.publish_files, a.registry_url, a.token
+    FROM packages p LEFT JOIN accounts a ON p.account_id = a.id
+    WHERE p.id = ?
+  `).get(packageId) as { name: string; publish_files: string | null; registry_url: string | null; token: string | null } | undefined;
+
+  if (!row) return { success: false, output: 'package not found' };
+  if (!row.publish_files) return { success: false, output: 'no stored files — cannot retry (package predates file storage)' };
+  if (!row.registry_url) return { success: false, output: 'no account linked' };
+
+  const files = JSON.parse(row.publish_files) as Record<string, string>;
+  const { success, output } = publishFiles(row.name, row.registry_url, row.token, files);
+  db.prepare('UPDATE packages SET status = ? WHERE id = ?').run(success ? 'published' : 'failed', packageId);
+  return { success, output };
+}
+
+/** Fetch the files of a published package from the registry. Returns null if not reachable. */
+export function fetchPackageFiles(pkgName: string, registryUrl: string, version?: string): Record<string, string> | null {
+  const tmpDir = path.join(os.tmpdir(), `dolus-view-${crypto.randomUUID()}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+  try {
+    const spec = version ? `${pkgName}@${version}` : pkgName;
+    const result = spawnSync('npm', ['pack', spec, '--registry', registryUrl], {
+      cwd: tmpDir,
+      encoding: 'utf8',
+    });
+    if (result.status !== 0) return null;
+
+    const tgz = fs.readdirSync(tmpDir).find(f => f.endsWith('.tgz'));
+    if (!tgz) return null;
+
+    spawnSync('tar', ['xzf', tgz], { cwd: tmpDir });
+
+    const pkgDir = path.join(tmpDir, 'package');
+    if (!fs.existsSync(pkgDir)) return null;
+
+    const files: Record<string, string> = {};
+    for (const file of fs.readdirSync(pkgDir)) {
+      const filePath = path.join(pkgDir, file);
+      if (fs.statSync(filePath).isFile()) {
+        try { files[file] = fs.readFileSync(filePath, 'utf8'); } catch (_) { /* skip binary */ }
+      }
+    }
+    return files;
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 }

@@ -101,6 +101,7 @@ try { db.exec('ALTER TABLE packages ADD COLUMN campaign_id INTEGER REFERENCES ca
 try { db.exec('ALTER TABLE packages ADD COLUMN role TEXT'); } catch (_) {}
 try { db.exec('ALTER TABLE campaigns ADD COLUMN payload_id INTEGER REFERENCES payloads(id)'); } catch (_) {}
 try { db.exec('ALTER TABLE campaigns ADD COLUMN split_analysis TEXT'); } catch (_) {}
+try { db.exec('ALTER TABLE packages ADD COLUMN publish_files TEXT'); } catch (_) {}
 
 // Seed default settings (INSERT OR IGNORE — first boot only)
 const seedSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

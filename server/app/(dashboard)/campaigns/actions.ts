@@ -1,7 +1,7 @@
 'use server';
 import { redirect } from 'next/navigation';
 import db, { type Account } from '@/lib/db';
-import { publishCampaign, deleteCampaign } from '@/lib/publish';
+import { publishCampaign, deleteCampaign, retryPackagePublish } from '@/lib/publish';
 
 export async function publishCampaignAction(formData: FormData) {
   const name = String(formData.get('name') || '').trim();
@@ -24,6 +24,30 @@ export async function publishCampaignAction(formData: FormData) {
 
   const result = publishCampaign(name, accountId, depth, beaconSecret, payloadId);
   redirect(`/campaigns?created=${encodeURIComponent(name)}&status=${result.success ? 'ok' : 'fail'}`);
+}
+
+export async function retryCampaignFailedAction(formData: FormData) {
+  const id = Number(formData.get('id'));
+  if (!id) redirect('/campaigns');
+
+  const failed = db.prepare("SELECT id FROM packages WHERE campaign_id = ? AND status = 'failed'").all(id) as { id: number }[];
+
+  let anyOk = false;
+  for (const pkg of failed) {
+    const { success } = retryPackagePublish(pkg.id);
+    if (success) anyOk = true;
+  }
+
+  // Update campaign status
+  const all = db.prepare('SELECT status FROM packages WHERE campaign_id = ?').all(id) as { status: string }[];
+  const allPublished = all.every(p => p.status === 'published');
+  const anyPublished = all.some(p => p.status === 'published');
+  db.prepare('UPDATE campaigns SET status = ? WHERE id = ?').run(
+    allPublished ? 'published' : anyPublished ? 'partial' : 'failed',
+    id,
+  );
+
+  redirect(`/campaigns/${id}?retried=1&status=${anyOk ? 'ok' : 'fail'}`);
 }
 
 export async function deleteCampaignAction(formData: FormData) {

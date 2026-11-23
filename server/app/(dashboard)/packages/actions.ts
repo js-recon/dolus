@@ -1,7 +1,7 @@
 'use server';
 import { redirect } from 'next/navigation';
 import db, { type Account, type Payload } from '@/lib/db';
-import { publishPackage, unpublishPackage, packageExistsOnRegistry } from '@/lib/publish';
+import { publishPackage, unpublishPackage, packageExistsOnRegistry, retryPackagePublish } from '@/lib/publish';
 
 function resolveAccount(accountRef: string): Account | null {
   if (accountRef.startsWith('registry:')) {
@@ -78,6 +78,25 @@ export async function deletePackageAction(formData: FormData) {
   db.prepare('DELETE FROM packages WHERE id = ?').run(id);
   if (!unpubOk) redirect(`/packages?unpublish_error=${encodeURIComponent(unpubOut.slice(0, 200))}`);
   redirect('/packages');
+}
+
+export async function retryPublishAction(formData: FormData) {
+  const id = String(formData.get('id'));
+  const { success } = retryPackagePublish(Number(id));
+
+  // If this is a campaign package, also update campaign status
+  const pkg = db.prepare('SELECT campaign_id FROM packages WHERE id = ?').get(id) as { campaign_id: number | null } | undefined;
+  if (pkg?.campaign_id) {
+    const all = db.prepare('SELECT status FROM packages WHERE campaign_id = ?').all(pkg.campaign_id) as { status: string }[];
+    const allPublished = all.every(p => p.status === 'published');
+    const anyPublished = all.some(p => p.status === 'published');
+    db.prepare('UPDATE campaigns SET status = ? WHERE id = ?').run(
+      allPublished ? 'published' : anyPublished ? 'partial' : 'failed',
+      pkg.campaign_id,
+    );
+  }
+
+  redirect(`/packages/${id}?retried=1&status=${success ? 'ok' : 'fail'}`);
 }
 
 export async function prepareRepublishAction(formData: FormData) {
