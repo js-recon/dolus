@@ -8,7 +8,20 @@ services:
       DATABASE_PATH: /data/dolus.db
     volumes:
       - dolus-data:/data
+    depends_on:
+      - registry
+    restart: unless-stopped
+
+  registry:
+    image: verdaccio/verdaccio:6
+    ports:
+      - "4873:4873"
+    environment:
+      VERDACCIO_PUBLIC_URL: http://localhost:4873
+    volumes:
+      - verdaccio-storage:/verdaccio/storage
     restart: unless-stopped
 
 volumes:
   dolus-data:
+  verdaccio-storage:
