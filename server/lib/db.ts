@@ -134,6 +134,17 @@ const body = JSON.stringify(payload);`
   updateJs.run(extendedJs, 'recon-extended');
 } catch (_) { /* template dir not found, skip seeding */ }
 
+// Seed default registry account from env vars (first boot only)
+const registryUrl = process.env.REGISTRY_URL;
+const registryToken = process.env.REGISTRY_AUTH_TOKEN;
+const c2Url = process.env.C2_URL;
+if (registryUrl && registryToken && c2Url) {
+  const seedAccount = db.prepare(
+    'INSERT OR IGNORE INTO accounts (name, registry_url, token, c2_url, notes) VALUES (?, ?, ?, ?, ?)'
+  );
+  seedAccount.run('default', registryUrl, registryToken, c2Url, 'Auto-created by docker-compose');
+}
+
 export default db;
 
 export type Payload = {
